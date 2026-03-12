@@ -45,13 +45,18 @@ meta/
     credentials.json
     mail_token.pickle
     actions.log
-printify/src/
-    publish.py
-    tools.py
-    notification.py
-    logger_config.py
+printify/
+    src/
+        publish.py
+        tools.py
+        notification.py
+        logger_config.py
     README.md
     LICENSE
+    requirements.yml
+    pyproject.toml
+    gits.sh
+    run_tests.sh
 ```
 
 ## Requirements

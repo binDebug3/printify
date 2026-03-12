@@ -1,10 +1,11 @@
 # Printify to Etsy Auto Publisher
 
+[![Build Status](https://github.com/binDebug3/printify/actions/workflows/python-tests.yml/badge.svg)](https://github.com/binDebug3/printify/actions/workflows/python-tests.yml)
+
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](./LICENSE)
 [![Printify API](https://img.shields.io/badge/Printify-API-1DBA5A)](https://developers.printify.com/)
 [![Gmail API](https://img.shields.io/badge/Google-Gmail%20API-EA4335?logo=gmail&logoColor=white)](https://developers.google.com/gmail/api)
-[![Build Status](https://github.com/binDebug3/printify/actions/workflows/python-tests.yml/badge.svg)](https://github.com/binDebug3/printify/actions/workflows/python-tests.yml)
 
 Automate scheduled product publishing from [Printify](https://printify.com/) to Etsy, with action logging and optional email notifications.
 

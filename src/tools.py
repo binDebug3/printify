@@ -9,11 +9,20 @@ Functions:
     publish_product: Publish a product to Printify.
 """
 
+import argparse
+import json
+import pdb  # noqa: F401
+import sys
+from pathlib import Path
 from pprint import pprint
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 import requests
 from logger_config import log_action
+
+COMFORT_COLORS_BLUEPRINT_ID: int = 706
+COMFORT_COLORS_PRINT_PROVIDER_ID: int = 99
+SUCCESS: int = 200
 
 
 def load_api_token(filepath: Optional[str] = None) -> str:
@@ -189,7 +198,7 @@ def get_all_product_ids(
     log_action("calling get all products")
     response = get_all_products(shop_id, token)
 
-    if response.status_code != 200:
+    if response.status_code != SUCCESS:
         log_action("failed to retrieve products, " f"status_code={response.status_code}")
         raise ValueError(f"Failed to retrieve products: {response.status_code} - {response.text}")
 
@@ -207,6 +216,191 @@ def get_all_product_ids(
     return all_product_ids
 
 
-if __name__ == "__main__":
+def parse_variant_ids(
+    data: Dict,
+    output_path: str
+) -> Dict[str, Dict[str, int]]:
+    """
+    Parse variant data and create a mapping of color-size combinations to variant IDs.
+    
+    This function processes product variant data to extract color and size information,
+    organizing variant IDs in a hierarchical dictionary structure for easy lookup.
+    
+    Args:
+        data (Dict): Product data containing 'variants' and 'options' keys.
+            - 'variants' is a list of variant objects with 'id' and 'options' keys
+            - 'options' is a list of option objects with 'type' and 'values' keys
+        output_path (str): File path where the variant map will be saved as JSON.
+    Returns:
+        Dict[str, Dict[str, int]]: A nested dictionary mapping colors to sizes to variant IDs.
+            Structure: {color: {size: variant_id}}
+            Example: {"Red": {"Small": 12345}, "Blue": {"Medium": 12346}}
+    Side Effects:
+        - Logs the parsing action and file write operations
+        - Creates parent directories if they don't exist at output_path
+    """
+    variant_map: Dict = {}
+
+    # Map variant IDs to their color and size labels
+    log_action("parsing variant data to create color-size-variant_id mapping")
+    for variant in data.get("variants", []):
+        variant_id = variant.get("id")
+        color = variant.get("options", {}).get("color")
+        size = variant.get("options", {}).get("size")
+
+        if color and size:
+            if color not in variant_map:
+                variant_map[color] = {}
+            variant_map[color][size] = variant_id
+
+    # Save to JSON file
+    log_action(f"writing variant map to '{output_path}'")
+    output_file = Path(output_path)
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    with open(output_file, "w", encoding="utf-8") as f:
+        json.dump(variant_map, f, indent=4)
+    log_action(f"saved variant map with {len(variant_map)} colors to '{output_path}'")
+    return variant_map
+    
+
+def get_printify_variant_ids(
+    output_path: str = "../data/variant_map.json",
+    print_provider_id: Optional[int] = None,
+    blueprint_id: Optional[int] = None,
+    token: Optional[str] = None,
+) -> Dict[str, Dict[str, int]]:
+    """
+    Retrieves and maps product variants from a Printify blueprint.
+
+    This function fetches variant data from the Printify API for a specific
+    blueprint and print provider, then creates a nested dictionary mapping
+    colors to sizes and their corresponding variant IDs. The result is saved
+    to a JSON file.
+
+    Args:
+        blueprint_id (int): The unique identifier of the Printify blueprint.
+        print_provider_id (int): The unique identifier of the print provider.
+        output_path (str): The path to save the variant map JSON file.
+            Defaults to '../data/variant_map.json'.
+        token (str): The API authentication token for Printify API access.
+            If None, it will be loaded from file.
+
+    Returns:
+        dict: A nested dictionary mapping colors to sizes and variant IDs.
+            Format: {color: {size: variant_id, ...}, ...}
+
+    Raises:
+        requests.exceptions.RequestException: If the HTTP request fails.
+        ValueError: If the API response is invalid or missing expected data.
+    """
+    if print_provider_id is None:
+        log_action(f"print_provider_id missing, using default {COMFORT_COLORS_PRINT_PROVIDER_ID}")
+        print_provider_id = COMFORT_COLORS_PRINT_PROVIDER_ID
+    if blueprint_id is None:
+        log_action(f"blueprint_id missing, using default {COMFORT_COLORS_BLUEPRINT_ID}")
+        blueprint_id = COMFORT_COLORS_BLUEPRINT_ID
+    if token is None:
+        log_action("token missing, loading from file")
+        token = load_api_token()
+
+    url = (f"https://api.printify.com/v1/catalog/blueprints/{blueprint_id}/"
+           f"print_providers/{print_provider_id}/variants.json")
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+
+    try:
+        log_action(f"requesting variants for blueprint_id='{blueprint_id}' and "
+                   f"print_provider_id='{print_provider_id}'")
+        response = requests.get(url, headers=headers, timeout=10)
+    except requests.exceptions.RequestException as e:
+        log_action(f"request failed for blueprint_id='{blueprint_id}'")
+        log_action(f"error details: {e}")
+        raise e
+
+    if response.status_code != SUCCESS:
+        err_msg: str = f"Failed to retrieve variants: {response.status_code} - {response.text}"
+        log_action(err_msg)
+        raise ValueError(err_msg)
+    
+    data = response.json()    
+    log_action(f"data has keys: {list(data.keys())}")
+    log_action(f"received {len(data.get('variants', []))} for blueprint_id='{blueprint_id}'")
+    
+    return parse_variant_ids(data, output_path)
+
+
+def parse_args() -> str | None:
+    """
+    Parse command-line arguments and return the function name to execute.
+    
+    This function sets up an argument parser that accepts a function name 
+    (either full or abbreviated) and returns the corresponding full function name. 
+    If an abbreviated name is provided, it maps it to the full function name.
+    
+    Returns:
+        str | None: The name of the function to execute. Returns one of:
+            - "get_printify_variant_ids"
+            - "get_all_product_ids"
+            - "get_all_products"
+            Defaults to "get_printify_variant_ids" if no argument is provided.
+            Returns None if parsing fails or no valid function is selected.
+    Raises:
+        SystemExit: If an invalid function name is provided that is not in the choices list.
+    """
+    parser = argparse.ArgumentParser(
+        description="Run Printify tools functions from the command line."
+    )
+    parser.add_argument(
+        "function",
+        nargs="?",
+        default="get_printify_variant_ids",
+        help="Function to run (default: get_printify_variant_ids)",
+        choices=[
+            "get_printify_variant_ids",
+            "gpvi",
+            "get_all_product_ids",
+            "gapi",
+            "get_all_products",
+            "gap",
+        ],
+    )
+
+    args = parser.parse_args()
+
+    # Map abbreviated function names to full names
+    function_map = {
+        "gpvi": "get_printify_variant_ids",
+        "gapi": "get_all_product_ids",
+        "gap": "get_all_products",
+    }
+
+    function_name = function_map.get(args.function, args.function)
+    return function_name
+
+
+def main() -> None:
+    """
+    Execute Printify tools functions with default arguments.
+
+    Provides a command-line interface to run different functions from the
+    tools module using their default configuration.
+    """
     log_action("'TOOLS' script started ----------------------------------------\n")
-    pprint(get_all_product_ids())
+    function_name = parse_args()
+
+    try:
+        if function_name == "get_printify_variant_ids":
+            result = get_printify_variant_ids()
+            pprint(result)
+        elif function_name == "get_all_product_ids":
+            result = get_all_product_ids()
+            pprint(result)
+        elif function_name == "get_all_products":
+            result = get_all_products()
+            pprint(result.json())
+    except Exception as e:
+        log_action(f"error executing {function_name}: {e}")
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

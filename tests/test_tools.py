@@ -5,6 +5,7 @@ and get_all_product_ids without hitting the filesystem or the Printify API.
 """
 
 from unittest.mock import patch, MagicMock, mock_open
+import sys
 import pytest
 import requests
 
@@ -14,6 +15,12 @@ from src.tools import (
     publish_product,
     get_all_products,
     get_all_product_ids,
+    parse_variant_ids,
+    get_printify_variant_ids,
+    parse_args,
+    main,
+    COMFORT_COLORS_BLUEPRINT_ID,
+    COMFORT_COLORS_PRINT_PROVIDER_ID,
 )
 
 
@@ -222,3 +229,151 @@ class TestGetAllProductIds:
         with patch("src.tools.get_all_products", return_value=mock_resp):
             with pytest.raises(ValueError, match="404"):
                 get_all_product_ids(output_path=output_file, shop_id=SHOP_ID, token=TOKEN)
+
+
+class TestParseVariantIds:
+    """Tests for parse_variant_ids."""
+
+    def test_returns_nested_color_size_mapping_and_writes_json(self, tmp_path):
+        """Creates a color-size mapping and persists it to the requested file."""
+        output_file = tmp_path / "nested" / "variant_map.json"
+        data = {
+            "variants": [
+                {"id": 101, "options": {"color": "Red", "size": "M"}},
+                {"id": 102, "options": {"color": "Red", "size": "L"}},
+                {"id": 201, "options": {"color": "Blue", "size": "S"}},
+            ]
+        }
+
+        result = parse_variant_ids(data, str(output_file))
+
+        assert result == {
+            "Red": {"M": 101, "L": 102},
+            "Blue": {"S": 201},
+        }
+        assert output_file.exists()
+        assert output_file.read_text(encoding="utf-8")
+
+    def test_skips_variants_missing_color_or_size(self, tmp_path):
+        """Ignores incomplete variants instead of adding partial keys to the mapping."""
+        output_file = tmp_path / "variant_map.json"
+        data = {
+            "variants": [
+                {"id": 101, "options": {"color": "Red", "size": "M"}},
+                {"id": 102, "options": {"color": "Red"}},
+                {"id": 103, "options": {"size": "L"}},
+                {"id": 104, "options": {}},
+            ]
+        }
+
+        result = parse_variant_ids(data, str(output_file))
+
+        assert result == {"Red": {"M": 101}}
+
+
+class TestGetPrintifyVariantIds:
+    """Tests for get_printify_variant_ids."""
+
+    def test_uses_defaults_and_passes_response_data_to_parser(self, tmp_path):
+        """Uses default IDs and delegates response parsing to parse_variant_ids."""
+        output_file = str(tmp_path / "variant_map.json")
+        response = MagicMock(status_code=200)
+        response.json.return_value = {"variants": [{"id": 1, "options": {}}]}
+        parsed_map = {"Red": {"M": 1}}
+
+        with patch("src.tools.load_api_token", return_value=TOKEN), patch(
+            "src.tools.requests.get", return_value=response
+        ) as mock_get, patch("src.tools.parse_variant_ids", return_value=parsed_map) as mock_parse:
+            result = get_printify_variant_ids(output_path=output_file)
+
+        expected_url = (
+            "https://api.printify.com/v1/catalog/blueprints/"
+            f"{COMFORT_COLORS_BLUEPRINT_ID}/print_providers/"
+            f"{COMFORT_COLORS_PRINT_PROVIDER_ID}/variants.json"
+        )
+        assert result == parsed_map
+        assert mock_get.call_args[0][0] == expected_url
+        assert mock_get.call_args[1]["headers"]["Authorization"] == f"Bearer {TOKEN}"
+        mock_parse.assert_called_once_with(response.json.return_value, output_file)
+
+    def test_raises_value_error_when_api_returns_non_200(self, tmp_path):
+        """Raises ValueError with response details when the variants API fails."""
+        output_file = str(tmp_path / "variant_map.json")
+        response = MagicMock(status_code=500, text="server error")
+
+        with patch("src.tools.requests.get", return_value=response):
+            with pytest.raises(ValueError, match="Failed to retrieve variants: 500"):
+                get_printify_variant_ids(
+                    output_path=output_file,
+                    print_provider_id=1,
+                    blueprint_id=2,
+                    token=TOKEN,
+                )
+
+    def test_re_raises_request_exception(self, tmp_path):
+        """Propagates request-layer failures from requests.get."""
+        output_file = str(tmp_path / "variant_map.json")
+
+        with patch(
+            "src.tools.requests.get",
+            side_effect=requests.exceptions.RequestException("boom"),
+        ):
+            with pytest.raises(requests.exceptions.RequestException, match="boom"):
+                get_printify_variant_ids(
+                    output_path=output_file,
+                    print_provider_id=1,
+                    blueprint_id=2,
+                    token=TOKEN,
+                )
+
+
+class TestParseArgs:
+    """Tests for parse_args."""
+
+    def test_defaults_to_variant_lookup(self):
+        """Returns get_printify_variant_ids when no CLI function is provided."""
+        with patch.object(sys, "argv", ["tools.py"]):
+            assert parse_args() == "get_printify_variant_ids"
+
+    def test_maps_short_aliases_to_full_function_names(self):
+        """Translates supported short CLI aliases into full function names."""
+        with patch.object(sys, "argv", ["tools.py", "gpvi"]):
+            assert parse_args() == "get_printify_variant_ids"
+
+        with patch.object(sys, "argv", ["tools.py", "gapi"]):
+            assert parse_args() == "get_all_product_ids"
+
+        with patch.object(sys, "argv", ["tools.py", "gap"]):
+            assert parse_args() == "get_all_products"
+
+    def test_invalid_function_raises_system_exit(self):
+        """Lets argparse reject unsupported function names."""
+        with patch.object(sys, "argv", ["tools.py", "bad"]):
+            with pytest.raises(SystemExit):
+                parse_args()
+
+
+class TestMain:
+    """Tests for main."""
+
+    def test_dispatches_variant_lookup_and_prints_result(self):
+        """Executes the variant lookup branch selected by parse_args."""
+        variant_map = {"Red": {"M": 101}}
+
+        with patch("src.tools.parse_args", return_value="get_printify_variant_ids"), patch(
+            "src.tools.get_printify_variant_ids", return_value=variant_map
+        ) as mock_get_variants, patch("src.tools.pprint") as mock_pprint:
+            main()
+
+        mock_get_variants.assert_called_once_with()
+        mock_pprint.assert_called_once_with(variant_map)
+
+    def test_exits_with_status_one_on_error(self):
+        """Exits with code 1 when the selected command raises an exception."""
+        with patch("src.tools.parse_args", return_value="get_all_products"), patch(
+            "src.tools.get_all_products", side_effect=RuntimeError("failure")
+        ), patch("src.tools.sys.exit", side_effect=SystemExit(1)) as mock_exit:
+            with pytest.raises(SystemExit, match="1"):
+                main()
+
+        mock_exit.assert_called_once_with(1)

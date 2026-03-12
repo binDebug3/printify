@@ -235,7 +235,7 @@ class TestParseVariantIds:
     """Tests for parse_variant_ids."""
 
     def test_returns_nested_color_size_mapping_and_writes_json(self, tmp_path):
-        """Creates a color-size mapping and persists it to the requested file."""
+        """Creates the ids payload shape and persists it to the requested file."""
         output_file = tmp_path / "nested" / "variant_map.json"
         data = {
             "variants": [
@@ -248,8 +248,10 @@ class TestParseVariantIds:
         result = parse_variant_ids(data, str(output_file))
 
         assert result == {
-            "Red": {"M": 101, "L": 102},
-            "Blue": {"S": 201},
+            "variants": [
+                {"color": "Red", "ids": [101, 102]},
+                {"color": "Blue", "ids": [201]},
+            ]
         }
         assert output_file.exists()
         assert output_file.read_text(encoding="utf-8")
@@ -268,7 +270,7 @@ class TestParseVariantIds:
 
         result = parse_variant_ids(data, str(output_file))
 
-        assert result == {"Red": {"M": 101}}
+        assert result == {"variants": [{"color": "Red", "ids": [101]}]}
 
 
 class TestGetPrintifyVariantIds:
@@ -279,7 +281,7 @@ class TestGetPrintifyVariantIds:
         output_file = str(tmp_path / "variant_map.json")
         response = MagicMock(status_code=200)
         response.json.return_value = {"variants": [{"id": 1, "options": {}}]}
-        parsed_map = {"Red": {"M": 1}}
+        parsed_map = {"variants": [{"color": "Red", "ids": [1]}]}
 
         with patch("src.tools.load_api_token", return_value=TOKEN), patch(
             "src.tools.requests.get", return_value=response

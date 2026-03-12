@@ -219,12 +219,13 @@ def get_all_product_ids(
 def parse_variant_ids(
     data: Dict,
     output_path: str
-) -> Dict[str, Dict[str, int]]:
+) -> Dict[str, List[Dict[str, object]]]:
     """
-    Parse variant data and create a mapping of color-size combinations to variant IDs.
+    Parse variant data into color entries with ordered variant IDs.
     
-    This function processes product variant data to extract color and size information,
-    organizing variant IDs in a hierarchical dictionary structure for easy lookup.
+    This function processes product variant data and groups variant IDs by color,
+    preserving the API response order. The resulting payload is serialized as JSON
+    with one top-level key: 'variants'.
     
     Args:
         data (Dict): Product data containing 'variants' and 'options' keys.
@@ -232,35 +233,43 @@ def parse_variant_ids(
             - 'options' is a list of option objects with 'type' and 'values' keys
         output_path (str): File path where the variant map will be saved as JSON.
     Returns:
-        Dict[str, Dict[str, int]]: A nested dictionary mapping colors to sizes to variant IDs.
-            Structure: {color: {size: variant_id}}
-            Example: {"Red": {"Small": 12345}, "Blue": {"Medium": 12346}}
+        Dict[str, List[Dict[str, object]]]: A dictionary with one key, 'variants',
+            whose value is a list of objects in the shape
+            [{"color": color_name, "ids": [variant_ids]}].
+            Example: {"variants": [{"color": "Red", "ids": [12345, 12346]}]}
     Side Effects:
         - Logs the parsing action and file write operations
         - Creates parent directories if they don't exist at output_path
     """
-    variant_map: Dict = {}
+    color_to_ids: Dict[str, List[int]] = {}
 
-    # Map variant IDs to their color and size labels
-    log_action("parsing variant data to create color-size-variant_id mapping")
+    # Group variant IDs by color in stable traversal order.
+    log_action("parsing variant data to create color-to-ids mapping")
     for variant in data.get("variants", []):
         variant_id = variant.get("id")
         color = variant.get("options", {}).get("color")
         size = variant.get("options", {}).get("size")
 
-        if color and size:
-            if color not in variant_map:
-                variant_map[color] = {}
-            variant_map[color][size] = variant_id
+        if color and size and isinstance(variant_id, int):
+            if color not in color_to_ids:
+                color_to_ids[color] = []
+            color_to_ids[color].append(variant_id)
+
+    payload: Dict[str, List[Dict[str, object]]] = {
+        "variants": [
+            {"color": color, "ids": ids}
+            for color, ids in color_to_ids.items()
+        ]
+    }
 
     # Save to JSON file
     log_action(f"writing variant map to '{output_path}'")
     output_file = Path(output_path)
     output_file.parent.mkdir(parents=True, exist_ok=True)
     with open(output_file, "w", encoding="utf-8") as f:
-        json.dump(variant_map, f, indent=4)
-    log_action(f"saved variant map with {len(variant_map)} colors to '{output_path}'")
-    return variant_map
+        json.dump(payload, f, indent=4)
+    log_action(f"saved variant map with {len(color_to_ids)} colors to '{output_path}'")
+    return payload
     
 
 def get_printify_variant_ids(
@@ -268,7 +277,7 @@ def get_printify_variant_ids(
     print_provider_id: Optional[int] = None,
     blueprint_id: Optional[int] = None,
     token: Optional[str] = None,
-) -> Dict[str, Dict[str, int]]:
+) -> Dict[str, List[Dict[str, object]]]:
     """
     Retrieves and maps product variants from a Printify blueprint.
 
@@ -286,8 +295,8 @@ def get_printify_variant_ids(
             If None, it will be loaded from file.
 
     Returns:
-        dict: A nested dictionary mapping colors to sizes and variant IDs.
-            Format: {color: {size: variant_id, ...}, ...}
+        dict: A dictionary with a single 'variants' key containing a list of
+            objects in the shape [{"color": color_name, "ids": [variant_ids]}].
 
     Raises:
         requests.exceptions.RequestException: If the HTTP request fails.

@@ -14,21 +14,19 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
+    # Use Conda to handle the requirements.yml file
+    - name: Setup Miniconda
+      uses: conda-incubator/setup-miniconda@v3
       with:
+        activate-environment: test-env
+        environment-file: requirements.yml
         python-version: '3.12'
-
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        # Install pandas, requests, and pytest (needed to run tests)
-        pip install -r requirements.txt
-        pip install pytest 
+        auto-activate-base: false
 
     - name: Run Pytest
+      shell: bash -el {0} # Important: Tells the shell to use the Conda environment
+      env:
+        PYTHONPATH: .
       run: |
-        # This tells pytest to look specifically in your tests folder
-        # -v provides a "verbose" output so you can see each test name
-        python -m compileall .
+        pip install pytest # Ensure pytest is available in the env
         pytest printify/tests -v

@@ -99,6 +99,21 @@ All runtime files are loaded from paths relative to `printify/`.
 	 - Put OAuth client file in `../meta/cal_credentials.json`
 	 - First run will create/update `../meta/mail_token.pickle`
 
+5. Set scheduled task to run `python publish.py` daily (e.g. using cron or Windows Task Scheduler). 
+    On Windows,
+     - Open Task Scheduler using the Start menu
+     - Click "Create Basic Task" on the right and add any name and description
+     - Choose "Daily" and set your desired time
+     - Choose the time of day to run the task (e.g. 9:00 AM)
+     - Choose "Start a program" and browse to your Python executable (e.g. `C:\path\to\python.exe`)
+        in your newly created virtual environment
+     - Add the argument `publish.py` (no quotes or any special characters) 
+     - Set the "Start in" field to the `printify/` directory (e.g. `C:\path\to\printify`)
+     - Click "Finish" to create the task
+     - Test the task by right-clicking it and selecting "Run"
+     - A Command Prompt window should open and run the script, 
+        and you can check the log file for results
+
 ## Installation
 
 From the workspace root (`automation/`):

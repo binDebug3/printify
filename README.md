@@ -116,7 +116,7 @@ All runtime files are loaded from paths relative to `printify/`.
 
 ## Installation
 
-From the workspace root (`automation/`):
+From the workspace root:
 
 ```bash
 cd printify

@@ -34,23 +34,22 @@ This project reads a daily publishing schedule, publishes eligible products thro
 This repository expects the following workspace layout:
 
 ```text
-automation/
-	data/
-		schedule.csv
-	meta/
-		api_token.txt
-		shop_id.txt
-		email_address.txt
-		credentials.json
-		mail_token.pickle
-		actions.log
-	printify/
-		publish.py
-		tools.py
-		notification.py
-		logger_config.py
-		README.md
-		LICENSE
+data/
+    schedule.csv
+meta/
+    api_token.txt
+    shop_id.txt
+    email_address.txt
+    credentials.json
+    mail_token.pickle
+    actions.log
+printify/
+    publish.py
+    tools.py
+    notification.py
+    logger_config.py
+    README.md
+    LICENSE
 ```
 
 ## Requirements
@@ -78,13 +77,15 @@ pip install requests pandas google-auth google-auth-oauthlib google-api-python-c
 
 All runtime files are loaded from paths relative to `printify/`.
 
-1. Set Printify API token
+1. Follow these [instructions](https://developers.printify.com/#create-a-personal-access-token) 
+    under `Create a personal access token` to set Printify API token
 	 Put your token in `../meta/api_token.txt`.
 
 2. Set default shop id
 	 Put your shop id in `../meta/shop_id.txt`.
 
-3. Configure publishing schedule
+3. Configure publishing schedule. You can use `python tools.py` to obtain all product ids
+    for the products in your shop
 	 Create/update `../data/schedule.csv` with at least these columns:
 	 - `publish_date` (format: `MM/DD/YYYY`)
 	 - `shop_id`
@@ -92,7 +93,8 @@ All runtime files are loaded from paths relative to `printify/`.
 	 - `nick_name`
 	 - `publish_status` (`True` or `False`)
 
-4. Configure email notifications (optional)
+4. Follow these [instructions](https://developers.google.com/workspace/guides/create-credentials) 
+    to configure email notifications (optional)
 	 - Put recipient email in `../meta/email_address.txt`
 	 - Put OAuth client file in `../meta/cal_credentials.json`
 	 - First run will create/update `../meta/mail_token.pickle`

@@ -114,6 +114,7 @@ def send_email(subject: str,
         log_action(f"Credential refresh failed: {e}")
         log_action("Credentials might be expired. "
                    "Delete the file 'mail_token.pickle' and try again.")
+        return False, None
     
     if recipient is None:
         log_action("No recipient provided, loading default recipient from file")

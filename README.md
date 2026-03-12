@@ -45,7 +45,7 @@ meta/
     credentials.json
     mail_token.pickle
     actions.log
-printify/
+printify/src/
     publish.py
     tools.py
     notification.py
@@ -101,7 +101,7 @@ All runtime files are loaded from paths relative to `printify/`.
 	 - Put OAuth client file in `../meta/cal_credentials.json`
 	 - First run will create/update `../meta/mail_token.pickle`
 
-5. Set scheduled task to run `python publish.py` daily (e.g. using cron or Windows Task Scheduler). 
+5. Set scheduled task to run `python src/publish.py` daily (e.g. using cron or Windows Task Scheduler). 
     On Windows,
      - Open Task Scheduler using the Start menu
      - Click "Create Basic Task" on the right and add any name and description
@@ -134,7 +134,7 @@ Run a single publishing job:
 
 ```bash
 cd printify
-python publish.py
+python src/publish.py
 ```
 
 What happens during a run:
@@ -155,7 +155,7 @@ Email notifications are handled in `notification.py` using the Gmail API.
 If token refresh or auth fails:
 
 - remove `../meta/mail_token.pickle`
-- rerun `python publish.py` to reauthorize
+- rerun `python src/publish.py` to reauthorize
 
 ## Contributors
 

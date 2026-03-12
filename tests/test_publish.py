@@ -8,7 +8,7 @@ from datetime import datetime
 from unittest.mock import patch, MagicMock
 import pandas as pd
 
-from publish import main
+from src.publish import main
 
 
 TODAY = datetime.now().strftime("%m/%d/%Y")
@@ -45,7 +45,7 @@ class TestMain:
     def test_prints_error_when_schedule_missing(self, tmp_path, capsys):
         """Prints an error message and returns early when the schedule file is absent."""
         missing = str(tmp_path / "nonexistent.csv")
-        with patch("publish.load_api_token", return_value="tok"):
+        with patch("src.publish.load_api_token", return_value="tok"):
             main(schedule_file=missing)
 
         assert "not found" in capsys.readouterr().out.lower()
@@ -53,9 +53,9 @@ class TestMain:
     def test_does_not_publish_when_no_rows_match_today(self, tmp_path):
         """Does not call publish_product when no rows have today's date."""
         csv = make_schedule(tmp_path, [row(publish_date=OTHER_DAY)])
-        with patch("publish.load_api_token", return_value="tok"), patch(
-            "publish.publish_product"
-        ) as mock_pub, patch("publish.send_email"):
+        with patch("src.publish.load_api_token", return_value="tok"), patch(
+            "src.publish.publish_product"
+        ) as mock_pub, patch("src.publish.send_email"):
             main(schedule_file=csv)
 
         mock_pub.assert_not_called()
@@ -64,9 +64,9 @@ class TestMain:
         """Calls publish_product with the correct arguments for an unpublished row."""
         csv = make_schedule(tmp_path, [row(product_id="p1", shop_id="s1")])
         mock_resp = MagicMock(status_code=200)
-        with patch("publish.load_api_token", return_value="tok"), patch(
-            "publish.publish_product", return_value=mock_resp
-        ) as mock_pub, patch("publish.send_email"):
+        with patch("src.publish.load_api_token", return_value="tok"), patch(
+            "src.publish.publish_product", return_value=mock_resp
+        ) as mock_pub, patch("src.publish.send_email"):
             main(schedule_file=csv)
 
         mock_pub.assert_called_once_with("p1", "s1", "tok")
@@ -76,9 +76,9 @@ class TestMain:
         rows = [row(product_id="p1"), row(product_id="p2")]
         csv = make_schedule(tmp_path, rows)
         mock_resp = MagicMock(status_code=200)
-        with patch("publish.load_api_token", return_value="tok"), patch(
-            "publish.publish_product", return_value=mock_resp
-        ) as mock_pub, patch("publish.send_email"):
+        with patch("src.publish.load_api_token", return_value="tok"), patch(
+            "src.publish.publish_product", return_value=mock_resp
+        ) as mock_pub, patch("src.publish.send_email"):
             main(schedule_file=csv)
 
         assert mock_pub.call_count == 2
@@ -88,9 +88,9 @@ class TestMain:
     def test_skips_already_published_product(self, tmp_path):
         """Does not call publish_product when publish_status is True."""
         csv = make_schedule(tmp_path, [row(publish_status=True)])
-        with patch("publish.load_api_token", return_value="tok"), patch(
-            "publish.publish_product"
-        ) as mock_pub, patch("publish.send_email"):
+        with patch("src.publish.load_api_token", return_value="tok"), patch(
+            "src.publish.publish_product"
+        ) as mock_pub, patch("src.publish.send_email"):
             main(schedule_file=csv)
 
         mock_pub.assert_not_called()
@@ -99,9 +99,9 @@ class TestMain:
         """Calls send_email once for each successfully published product."""
         csv = make_schedule(tmp_path, [row()])
         mock_resp = MagicMock(status_code=200)
-        with patch("publish.load_api_token", return_value="tok"), patch(
-            "publish.publish_product", return_value=mock_resp
-        ), patch("publish.send_email") as mock_email:
+        with patch("src.publish.load_api_token", return_value="tok"), patch(
+            "src.publish.publish_product", return_value=mock_resp
+        ), patch("src.publish.send_email") as mock_email:
             main(schedule_file=csv)
 
         mock_email.assert_called_once()
@@ -110,9 +110,9 @@ class TestMain:
         """Does not call send_email when publish returns a non-200 status code."""
         csv = make_schedule(tmp_path, [row()])
         mock_resp = MagicMock(status_code=422, text="Unprocessable")
-        with patch("publish.load_api_token", return_value="tok"), patch(
-            "publish.publish_product", return_value=mock_resp
-        ), patch("publish.send_email") as mock_email:
+        with patch("src.publish.load_api_token", return_value="tok"), patch(
+            "src.publish.publish_product", return_value=mock_resp
+        ), patch("src.publish.send_email") as mock_email:
             main(schedule_file=csv)
 
         mock_email.assert_not_called()
@@ -121,9 +121,9 @@ class TestMain:
         """Writes True to publish_status in the CSV for a successfully published product."""
         csv = make_schedule(tmp_path, [row(product_id="p1")])
         mock_resp = MagicMock(status_code=200)
-        with patch("publish.load_api_token", return_value="tok"), patch(
-            "publish.publish_product", return_value=mock_resp
-        ), patch("publish.send_email"):
+        with patch("src.publish.load_api_token", return_value="tok"), patch(
+            "src.publish.publish_product", return_value=mock_resp
+        ), patch("src.publish.send_email"):
             main(schedule_file=csv)
 
         updated = pd.read_csv(csv)
@@ -133,9 +133,9 @@ class TestMain:
         """Leaves publish_status False in the CSV when publish fails."""
         csv = make_schedule(tmp_path, [row(product_id="p1")])
         mock_resp = MagicMock(status_code=500, text="Server Error")
-        with patch("publish.load_api_token", return_value="tok"), patch(
-            "publish.publish_product", return_value=mock_resp
-        ), patch("publish.send_email"):
+        with patch("src.publish.load_api_token", return_value="tok"), patch(
+            "src.publish.publish_product", return_value=mock_resp
+        ), patch("src.publish.send_email"):
             main(schedule_file=csv)
 
         updated = pd.read_csv(csv)
@@ -145,9 +145,9 @@ class TestMain:
         """Prints a summary line reporting how many products were published."""
         csv = make_schedule(tmp_path, [row(), row(product_id="p2")])
         mock_resp = MagicMock(status_code=200)
-        with patch("publish.load_api_token", return_value="tok"), patch(
-            "publish.publish_product", return_value=mock_resp
-        ), patch("publish.send_email"):
+        with patch("src.publish.load_api_token", return_value="tok"), patch(
+            "src.publish.publish_product", return_value=mock_resp
+        ), patch("src.publish.send_email"):
             main(schedule_file=csv)
 
         out = capsys.readouterr().out
@@ -158,9 +158,9 @@ class TestMain:
         rows = [row(product_id="p1", publish_status=True), row(product_id="p2")]
         csv = make_schedule(tmp_path, rows)
         mock_resp = MagicMock(status_code=200)
-        with patch("publish.load_api_token", return_value="tok"), patch(
-            "publish.publish_product", return_value=mock_resp
-        ) as mock_pub, patch("publish.send_email"):
+        with patch("src.publish.load_api_token", return_value="tok"), patch(
+            "src.publish.publish_product", return_value=mock_resp
+        ) as mock_pub, patch("src.publish.send_email"):
             main(schedule_file=csv)
 
         mock_pub.assert_called_once_with("p2", "s1", "tok")

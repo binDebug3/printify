@@ -106,7 +106,7 @@ def main(token_file: Optional[str] = None, schedule_file: Optional[str] = None) 
 
 
 if __name__ == "__main__":
-    log_action("Publish script started ----------------------------------------\n")
+    log_action("'PUBLISH' script started ----------------------------------------\n")
     print("CHECKING FOR PRODUCTS TO PUBLISH")
     main()
     time.sleep(2)  # Sleep to ensure all log messages are written before the script exits

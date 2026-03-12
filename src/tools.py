@@ -207,5 +207,5 @@ def get_all_product_ids(
 
 
 if __name__ == "__main__":
-    log_action("Tools script started ----------------------------------------\n")
+    log_action("'TOOLS' script started ----------------------------------------\n")
     pprint(get_all_product_ids())

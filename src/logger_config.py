@@ -18,7 +18,7 @@ from pathlib import Path
 import logging
 
 
-LOG_PATH = Path(__file__).resolve().parent.parent / "meta" / "actions.log"
+LOG_PATH = Path(__file__).resolve().parent.parent.parent / "meta" / "actions.log"
 logger = logging.getLogger(__name__)
 if not logger.handlers:
     logger.setLevel(logging.INFO)

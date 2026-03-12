@@ -148,7 +148,7 @@ def send_email(subject: str,
 
 if __name__ == "__main__":
     # Example usage
-    log_action("Notification script started --------------------------------------")
+    log_action("'NOTIFICATION' script started --------------------------------------")
     success, message_id = send_email(
         subject="Test Email from Printify Automation",
         message_text="This is a test email sent from the Printify automation tool."

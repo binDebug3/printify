@@ -66,7 +66,7 @@ def main(token_file: Optional[str] = None, schedule_file: Optional[str] = None) 
     log_action(f"loading publishing schedule from '{schedule_file}'")
     today: str = datetime.now().strftime("%m/%d/%Y")
     full_df: pd.DataFrame = pd.read_csv(schedule_file)
-    full_df["publish_status"] = full_df["publish_status"].astype(str).str.lower() == "True"
+    full_df["publish_status"] = full_df["publish_status"].astype(str).str.lower() == "true"
     todays_df = full_df[full_df["publish_date"] == today].copy()
     log_action(f"found {len(todays_df)} products scheduled for publishing today ({today})")
 

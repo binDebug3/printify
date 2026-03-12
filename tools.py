@@ -105,7 +105,8 @@ def publish_product(
     }
 
     log_action(
-        f"sending publish request for " f"product_id='{product_id}' and shop_id='{shop_id}'")
+        f"sending publish request for " f"product_id='{product_id}' and shop_id='{shop_id}'"
+    )
 
     response = requests.post(publish_url, json=payload, headers=headers, timeout=10)
     log_action(f"received status_code={response.status_code} " f"for product_id='{product_id}'")

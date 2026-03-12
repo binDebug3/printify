@@ -20,12 +20,64 @@ Example:
 
 import os
 import time
-from typing import Optional
 from datetime import datetime
+from typing import Optional, Tuple
+
 import pandas as pd
-from tools import load_api_token, publish_product
 from logger_config import log_action
 from notification import send_email
+from tools import load_api_token, publish_product
+
+
+def load_schedule(schedule_file: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Load the publishing schedule from a CSV file and filter for today's products.
+
+    This function reads a CSV file containing the publishing schedule, checks for
+    the required columns, and filters the DataFrame to include only rows where the
+    publish_date matches today's date. It also converts the 'publish_status' column
+    to boolean values for easier processing.
+
+    Args:
+        schedule_file (str): The path to the CSV file containing the publishing schedule.
+    Returns:
+        full_df (pd.DataFrame): The complete DataFrame loaded from the CSV file.
+        todays_df (pd.DataFrame): A filtered DataFrame containing only rows scheduled for today.
+    """
+
+    log_action(f"loading publishing schedule from '{schedule_file}'")
+    today: str = datetime.now().strftime("%m/%d/%Y")
+    full_df: pd.DataFrame = pd.read_csv(schedule_file)
+    full_df["publish_status"] = full_df["publish_status"].astype(str).str.lower() == "true"
+    todays_df = full_df[full_df["publish_date"] == today].copy()
+    log_action(f"found {len(todays_df)} products scheduled for publishing today ({today})")
+    return full_df, todays_df
+
+
+def update_schedule(full_df: pd.DataFrame, 
+                    schedule_file: str, 
+                    success_count: int, 
+                    total_count: int,
+                    ) -> None:
+    """
+    Update the schedule CSV file with the latest publish statuses.
+
+    This function writes the updated DataFrame back to the CSV file, ensuring that
+    the 'publish_status' column reflects the current state of each product's publishing process.
+
+    Args:
+        full_df (pd.DataFrame): The complete DataFrame with updated publish statuses.
+        schedule_file (str): The path to the CSV file to be updated.
+        success_count (int): The number of products successfully published.
+        total_count (int): The total number of products that were scheduled for publishing.
+    Returns:
+        None
+    """
+    log_action(f"Updating schedule file '{schedule_file}' with publish statuses")
+    full_df.to_csv(schedule_file, index=False)
+    success_message: str = f"Done. {success_count}/{total_count} products published."
+    log_action(success_message)
+    print(success_message)
 
 
 def main(token_file: Optional[str] = None, schedule_file: Optional[str] = None) -> None:
@@ -52,7 +104,6 @@ def main(token_file: Optional[str] = None, schedule_file: Optional[str] = None) 
         SystemExit: If 'schedule_file' is not found in the current directory.
     """
     success_status_code: int = 200
-    log_action("loading API token from file")
     token: str = load_api_token(token_file)
     if schedule_file is None:
         schedule_file = "../data/schedule.csv"
@@ -63,12 +114,7 @@ def main(token_file: Optional[str] = None, schedule_file: Optional[str] = None) 
         print(err_msg)
         return
 
-    log_action(f"loading publishing schedule from '{schedule_file}'")
-    today: str = datetime.now().strftime("%m/%d/%Y")
-    full_df: pd.DataFrame = pd.read_csv(schedule_file)
-    full_df["publish_status"] = full_df["publish_status"].astype(str).str.lower() == "true"
-    todays_df = full_df[full_df["publish_date"] == today].copy()
-    log_action(f"found {len(todays_df)} products scheduled for publishing today ({today})")
+    full_df, todays_df = load_schedule(schedule_file)
 
     success_count: int = 0
     for index, row in todays_df.iterrows():
@@ -96,13 +142,7 @@ def main(token_file: Optional[str] = None, schedule_file: Optional[str] = None) 
         else:
             log_action(f"Failed: {result.status_code} - {result.text}")
 
-    log_action(f"Updating schedule file '{schedule_file}' with publish statuses")
-    full_df.to_csv(schedule_file, index=False)
-    success_message: str = (
-        f"Done. {success_count}/{len(todays_df)} " + "products published successfully."
-    )
-    log_action(success_message)
-    print(success_message)
+    update_schedule(full_df, schedule_file, success_count, len(todays_df))
 
 
 if __name__ == "__main__":

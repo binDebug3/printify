@@ -14,9 +14,8 @@ Functions:
     _log_action: Log a standardized action message to the actions log file.
 """
 
-from pathlib import Path
 import logging
-
+from pathlib import Path
 
 LOG_PATH = Path(__file__).resolve().parent.parent.parent / "meta" / "actions.log"
 logger = logging.getLogger(__name__)

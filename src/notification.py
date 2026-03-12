@@ -26,19 +26,16 @@ Configuration:
 
 import base64
 import os.path
-from typing import Tuple, Optional, Dict, Any
 from email.mime.text import MIMEText
+from typing import Any, Dict, Optional, Tuple
 
-from google.auth.transport.requests import Request
 from google.auth.exceptions import RefreshError
+from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
-from googleapiclient.discovery import build
+from googleapiclient.discovery import Resource, build
 from googleapiclient.errors import HttpError
-from googleapiclient.discovery import Resource
-
 from logger_config import log_action
-
 
 # If modifying these scopes, delete the file token.json.
 SCOPES = ['https://www.googleapis.com/auth/gmail.modify']

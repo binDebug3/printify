@@ -9,8 +9,9 @@ Functions:
     publish_product: Publish a product to Printify.
 """
 
-from typing import Optional, List
 from pprint import pprint
+from typing import List, Optional
+
 import requests
 from logger_config import log_action
 

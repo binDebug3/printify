@@ -1,0 +1,13 @@
+name: printify-automation
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python>=3.10
+  - pandas
+  - requests
+  - pip
+  - pip:
+      - google-auth
+      - google-auth-oauthlib
+      - google-api-python-client

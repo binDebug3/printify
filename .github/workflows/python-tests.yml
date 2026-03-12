@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [ "main" ]
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -21,7 +24,7 @@ jobs:
         activate-environment: test-env
         environment-file: requirements.yml
         python-version: '3.12'
-        auto-activate-base: false
+        auto-activate: false
 
     - name: Run Pytest
       shell: bash -el {0} # Important: Tells the shell to use the Conda environment
@@ -29,4 +32,4 @@ jobs:
         PYTHONPATH: .
       run: |
         pip install pytest # Ensure pytest is available in the env
-        pytest printify/tests -v
+        pytest tests -v

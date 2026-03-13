@@ -107,6 +107,11 @@ class TestRunPipeline:
                 return_value={"pepper": [101]},
             ),
             patch.object(
+                pipeline_module.constants,
+                "REVIEW_DESIGNS",
+                False,
+            ),
+            patch.object(
                 pipeline_module,
                 "_require_setting",
                 side_effect=["gemini-key", "removebg-key", "printify-token", "shop-id"],
@@ -218,6 +223,11 @@ class TestRunPipeline:
                 pipeline_module,
                 "_load_color_to_ids_map",
                 return_value={"pepper": [101]},
+            ),
+            patch.object(
+                pipeline_module.constants,
+                "REVIEW_DESIGNS",
+                False,
             ),
             patch.object(
                 pipeline_module,

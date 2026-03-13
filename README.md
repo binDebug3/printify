@@ -1,4 +1,4 @@
-# Printify Automation
+﻿# Printify Automation
 
 [![Build Status](https://github.com/binDebug3/printify/actions/workflows/python-tests.yml/badge.svg)](https://github.com/binDebug3/printify/actions/workflows/python-tests.yml)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
@@ -6,43 +6,32 @@
 [![Printify API](https://img.shields.io/badge/Printify-API-1DBA5A)](https://developers.printify.com/)
 [![Gmail API](https://img.shields.io/badge/Google-Gmail%20API-EA4335?logo=gmail&logoColor=white)](https://developers.google.com/gmail/api)
 
-Automation for two related workflows:
+Automation for two workflows:
 
-1. Scheduled publication of existing Printify drafts to Etsy.
-2. AI-assisted mass production of new shirt listings, including dry runs, Printify draft creation, and artifact generation.
-
-The repository uses CSV- and file-based configuration under the workspace root, writes action logs to `meta/actions.log`, and stores generated listing assets under `data/images`.
+1. Scheduled publishing of existing Printify drafts.
+2. AI-assisted mass production of new listings with saved local artifacts.
 
 ## Table Of Contents
 
 - [Features](#features)
-- [Project Structure](#project-structure)
+- [File Architecture](#file-architecture)
 - [Requirements](#requirements)
-- [Configuration](#configuration)
 - [Installation](#installation)
 - [Usage](#usage)
 - [Testing](#testing)
+- [Configuration](#configuration)
 - [License](#license)
 
 ## Features
 
-- Scheduled Etsy publishing from `data/schedule.csv` through the Printify publish API.
-- CSV write-back of `publish_status` after successful scheduled publishes.
-- Delayed Etsy mockup sync after publish, using `data/images/<nick_name>/mockup_(color)_cropped.png` as the primary listing image.
-- Optional Gmail notifications when scheduled products go live.
-- Product utility commands for listing shop products and generating color-to-variant maps.
-- Mass production pipeline driven by `data/ideas.csv` and prompt templates in `data/prompts`.
-- Gemini-powered idea generation, listing copy generation, and image generation.
-- remove.bg integration for transparent artwork generation.
-- Printify dry-run and real-run support for draft product creation.
-- LLM-based design filtering from generated ideas down to `FILTERED_IDEAS_PER_KEYWORD` before image generation.
-- Optional browser-based design review UI for keep/retry/reject decisions before background removal.
-- Per-design artifact output under `data/images/<folder_slug>/`, including prompts, listing text, payloads, and API responses.
-- Post-dry-run command for creating a single Printify draft from an existing generated folder.
-- ideas.csv publication tracking: after successful mass-production publishes, eligible `used=false` rows are updated to `used=true`, `shirt_count=IDEAS_PER_KEYWORD`, and today's `publication_date`.
-- Console and log messaging when no unused ideas are available for mass production.
+- Scheduled publishing pipeline with status updates and optional notification email.
+- End-to-end mass production: idea generation, filtering, image generation,
+  background removal, listing text generation, and Printify draft creation.
+- Optional browser review UI for keep/retry/reject before background removal.
+- Local product viewer UI for browsing posted products by tile and detail page.
+- Dry-run-friendly workflow with per-design artifacts in `data/images`.
 
-## Project Structure
+## File Architecture
 
 ```text
 data/
@@ -59,6 +48,9 @@ printify/
         mass_production/
             add_etsy_mockup.py
             constants.py
+            design_crop.py
+            design_review_ui.py
+            etsy_client.py
             gemini_client.py
             io_utils.py
             models.py
@@ -66,10 +58,23 @@ printify/
             post_dry_run.py
             printify_client.py
             remove_bg.py
+            show_products.py
     tests/
         __init__.py
         conftest.py
+        manual/
+            manual_background_visual.py
+            manual_design_crop.py
+            manual_review_ui_runner.py
+            manual_show_products_from_data_images.py
+        test_add_etsy_mockup.py
+        test_design_crop.py
+        test_design_review_ui.py
+        test_mass_production_cli.py
+        test_mass_production_clients.py
         test_mass_production_io_utils.py
+        test_mass_production_pipeline.py
+        test_mass_production_post_dry_run.py
         test_notification.py
         test_publish.py
         test_tools.py
@@ -84,7 +89,7 @@ printify/
 - remove.bg API access for transparent artwork generation.
 - Gmail API credentials if email notifications are enabled.
 
-Primary Python dependencies used in this project:
+Primary Python dependencies:
 
 - pandas
 - requests
@@ -93,38 +98,6 @@ Primary Python dependencies used in this project:
 - google-auth
 - google-auth-oauthlib
 - google-api-python-client
-
-## Configuration
-
-The project expects the workspace layout shown above, with shared data and secrets outside the `printify/` folder.
-
-Required data and config files:
-
-- `../data/schedule.csv` for scheduled publishing.
-- `../data/ideas.csv` for mass production input and publication tracking.
-- `../data/variant_map.json` for mapping shirt colors to Printify variant IDs.
-- `../data/prompts/*.txt` for mass production prompt templates.
-- `../meta/api_token.txt` for the Printify API token.
-- `../meta/shop_id.txt` for the Printify shop ID.
-- `../meta/gemini_api_key.txt` for the Gemini API key.
-- `../meta/removebg_api_key.txt` for the remove.bg API key.
-- `../meta/etsy_api_key.json` for Etsy API credentials and Etsy shop ID.
-- `../meta/email_address.txt` for the notification recipient.
-- `../meta/cal_credentials.json` for Gmail OAuth credentials.
-
-Mass production background removal is controlled in `src/mass_production/constants.py`
-with `BACKGROUND_REMOVAL_MODE`. Use `"api"` to call remove.bg or `"manual"` to make
-either pure white or pure black pixels transparent, whichever removes more pixels.
-
-### schedule.csv
-
-The scheduled publishing workflow expects these columns:
-
-- `publish_date` in `MM/DD/YYYY` format.
-- `shop_id`
-- `product_id`
-- `nick_name`
-- `publish_status`
 
 ## Installation
 
@@ -147,8 +120,6 @@ pip install pandas requests pillow google-genai google-auth google-auth-oauthlib
 
 ### Scheduled publishing
 
-Run the scheduled Etsy publishing job:
-
 ```bash
 cd printify
 python src/publish.py
@@ -156,90 +127,60 @@ python src/publish.py
 
 What it does:
 
-1. Loads `data/schedule.csv`.
-2. Filters rows scheduled for today.
-3. Skips rows already marked `publish_status=True`.
-4. Publishes remaining drafts through Printify.
-5. Marks successful rows as published.
-6. Sends notification emails when configured.
-7. Waits one minute, then uploads the matching custom mockup to the Etsy listing.
-8. Writes the updated schedule back to disk.
+1. Loads `data/schedule.csv` and selects rows due today.
+2. Publishes remaining drafts through Printify.
+3. Updates publish status and sends notification email when configured.
+4. Syncs matching Etsy mockups after publish.
 
-### Shop utilities
+### Product viewer
 
-Export all Printify product IDs:
-
-```bash
-cd printify
-python src/tools.py get_all_product_ids
-```
-
-Generate `data/variant_map.json` for a blueprint and print provider:
-
-```bash
-cd printify
-python src/tools.py get_printify_variant_ids
-```
-
-Browse all posted Printify products in a local visual UI (tiles with mockups and titles):
+Browse all posted Printify products in a local visual UI:
 
 ```bash
 cd printify
 python src/mass_production/show_products.py
 ```
 
-Required environment variables for this viewer:
+Required environment variables:
 
 - `PRINTIFY_API_TOKEN`
 - `PRINTIFY_SHOP_ID`
 
 ### Mass production
 
-Run the generation pipeline:
+Run the pipeline:
 
 ```bash
 cd printify
 python src/mass_production.py
 ```
 
-For real-time terminal logs when using conda, prefer:
+For real-time terminal logs with conda:
 
 ```bash
 cd printify
 conda run --no-capture-output -n lila python -u .\src\mass_production.py --real-run
 ```
 
-Run with manual design review enabled:
+Manual design review is controlled by `REVIEW_DESIGNS` in
+`src/mass_production/constants.py`.
 
-```bash
-cd printify
-python src/mass_production.py --review-designs
-```
+Core flow:
 
-To open just the manual review UI against a few existing sample folders without
-running the rest of the pipeline:
+1. Read unused keywords from `data/ideas.csv`.
+2. Generate and filter ideas.
+3. Generate design images and optionally review/retry them.
+4. Create transparent art, mockups, and listing content.
+5. Build and optionally post Printify products.
+6. Save artifacts under `data/images/<folder_slug>/`.
+7. Mark matching ideas as published after successful posting.
+
+Run only the manual design review UI with existing sample folders:
 
 ```bash
 cd printify
 python tests/manual/manual_review_ui_runner.py
 ```
-
-What the mass production pipeline does:
-
-1. Reads unused keywords from `data/ideas.csv`.
-2. Generates ideas from the prompt templates.
-3. Filters generated ideas using `data/prompts/filter_design_descriptions.txt`, then stores filter metadata in `data/images/<keyword_slug>_filtering.json`.
-4. Generates design images for the filtered ideas.
-    The pipeline automatically detects the design bounding box and crops excess
-    whitespace with 5% padding before saving `design.png`.
-5. Optional `--review-designs` step: opens a local browser UI to keep, retry once, or reject each design before background removal. You can click any design image to expand it, drag the expanded preview around, and submit decisions with an automatic close attempt after submit. The review summary is saved to `data/images/<keyword_slug>_design_review.json`.
-6. Produces transparent artwork and mockups.
-7. Generates listing title, description, personas, and keyword tags.
-8. Builds Printify payloads and optionally creates draft products.
-9. Saves all generated artifacts under `data/images/<folder_slug>/`.
-10. Updates matching `ideas.csv` rows after successful publishing.
-
-If there are no rows with `used=false`, the pipeline logs and prints a message instead of running.
 
 ### Post dry-run publishing
 
@@ -250,23 +191,44 @@ cd printify
 python src/mass_production/post_dry_run.py <folder_slug>
 ```
 
-This command expects the folder under `data/images/` to contain the dry-run artifacts needed to rebuild the final Printify payload.
-
 ## Testing
 
-Run the full test suite:
+Run automated tests:
 
 ```bash
 cd printify
 pytest
 ```
 
-Run the manual-only crop smoke test (not included in default `pytest` discovery):
+Run a manual-only test explicitly (not part of normal `pytest` discovery):
 
 ```bash
 cd printify
 python -m pytest tests/manual/manual_design_crop.py::test_manual_crop_random_design_image -s
 ```
+
+## Configuration
+
+The project expects shared data and secrets outside `printify/`, matching the
+architecture above.
+
+Required data and secrets:
+
+- `../data/ideas.csv`
+- `../data/schedule.csv`
+- `../data/variant_map.json`
+- `../data/prompts/*.txt`
+- `../meta/api_token.txt`
+- `../meta/shop_id.txt`
+- `../meta/gemini_api_key.txt`
+- `../meta/removebg_api_key.txt`
+- `../meta/etsy_api_key.json`
+- `../meta/email_address.txt`
+- `../meta/cal_credentials.json`
+
+Most runtime behavior is configured in `src/mass_production/constants.py`
+(examples: `REVIEW_DESIGNS`, `IDEAS_PER_KEYWORD`,
+`FILTERED_IDEAS_PER_KEYWORD`, and `BACKGROUND_REMOVAL_MODE`).
 
 ## Contributors
 

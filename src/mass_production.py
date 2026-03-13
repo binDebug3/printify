@@ -80,14 +80,6 @@ def parse_args() -> argparse.Namespace:
         default=2,
         help="Number of generated ideas per keyword",
     )
-    parser.add_argument(
-        "--review-designs",
-        action="store_true",
-        help=(
-            "Open a local browser UI after design generation so you can keep, "
-            "retry, or reject designs before background removal"
-        ),
-    )
     return parser.parse_args()
 
 

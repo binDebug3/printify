@@ -36,6 +36,7 @@ The repository uses CSV- and file-based configuration under the workspace root, 
 - remove.bg integration for transparent artwork generation.
 - Printify dry-run and real-run support for draft product creation.
 - LLM-based design filtering from generated ideas down to `FILTERED_IDEAS_PER_KEYWORD` before image generation.
+- Optional browser-based design review UI for keep/retry/reject decisions before background removal.
 - Per-design artifact output under `data/images/<folder_slug>/`, including prompts, listing text, payloads, and API responses.
 - Post-dry-run command for creating a single Printify draft from an existing generated folder.
 - ideas.csv publication tracking: after successful mass-production publishes, eligible `used=false` rows are updated to `used=true`, `shirt_count=IDEAS_PER_KEYWORD`, and today's `publication_date`.
@@ -111,6 +112,10 @@ Required data and config files:
 - `../meta/email_address.txt` for the notification recipient.
 - `../meta/cal_credentials.json` for Gmail OAuth credentials.
 
+Mass production background removal is controlled in `src/mass_production/constants.py`
+with `BACKGROUND_REMOVAL_MODE`. Use `"api"` to call remove.bg or `"manual"` to make
+either pure white or pure black pixels transparent, whichever removes more pixels.
+
 ### schedule.csv
 
 The scheduled publishing workflow expects these columns:
@@ -185,16 +190,32 @@ cd printify
 python src/mass_production.py
 ```
 
+For real-time terminal logs when using conda, prefer:
+
+```bash
+cd printify
+conda run --no-capture-output -n lila python -u .\src\mass_production.py --real-run
+```
+
+Run with manual design review enabled:
+
+```bash
+cd printify
+python src/mass_production.py --review-designs
+```
+
 What the mass production pipeline does:
 
 1. Reads unused keywords from `data/ideas.csv`.
 2. Generates ideas from the prompt templates.
 3. Filters generated ideas using `data/prompts/filter_design_descriptions.txt`, then stores filter metadata in `data/images/<keyword_slug>_filtering.json`.
-4. Produces artwork, transparent artwork, and mockups.
-5. Generates listing title, description, personas, and keyword tags.
-6. Builds Printify payloads and optionally creates draft products.
-7. Saves all generated artifacts under `data/images/<folder_slug>/`.
-8. Updates matching `ideas.csv` rows after successful publishing.
+4. Generates design images for the filtered ideas.
+5. Optional `--review-designs` step: opens a local browser UI to keep, retry once, or reject each design before background removal. The review summary is saved to `data/images/<keyword_slug>_design_review.json`.
+6. Produces transparent artwork and mockups.
+7. Generates listing title, description, personas, and keyword tags.
+8. Builds Printify payloads and optionally creates draft products.
+9. Saves all generated artifacts under `data/images/<folder_slug>/`.
+10. Updates matching `ideas.csv` rows after successful publishing.
 
 If there are no rows with `used=false`, the pipeline logs and prints a message instead of running.
 

@@ -10,34 +10,29 @@ from src import mass_production as cli_module
 class TestParseArgs:
     """Tests for parse_args."""
 
-    def test_defaults_to_dry_run_with_expected_limits(self):
-        """Uses the documented default CLI values when no flags are provided."""
+    def test_defaults_to_dry_run_without_review(self):
+        """Uses dry-run defaults and keeps manual review disabled by default."""
         with patch.object(sys, "argv", ["mass_production.py"]):
             args = cli_module.parse_args()
 
         assert args.dry_run is True
-        assert args.keyword_limit == 25
-        assert args.ideas_per_keyword == 2
+        assert args.review_designs is False
 
-    def test_accepts_real_run_and_custom_limits(self):
-        """Parses explicit run-mode and limit overrides from the command line."""
+    def test_accepts_real_run_and_review_flag(self):
+        """Parses real-run mode together with explicit design review enablement."""
         with patch.object(
             sys,
             "argv",
             [
                 "mass_production.py",
                 "--real-run",
-                "--keyword-limit",
-                "3",
-                "--ideas-per-keyword",
-                "4",
+                "--review-designs",
             ],
         ):
             args = cli_module.parse_args()
 
         assert args.dry_run is False
-        assert args.keyword_limit == 3
-        assert args.ideas_per_keyword == 4
+        assert args.review_designs is True
 
 
 class TestMain:
@@ -47,7 +42,7 @@ class TestMain:
         """Loads the pipeline module and forwards parsed CLI arguments unchanged."""
         fake_run_pipeline = MagicMock()
         fake_pipeline_module = SimpleNamespace(run_pipeline=fake_run_pipeline)
-        fake_args = SimpleNamespace(dry_run=False, keyword_limit=7, ideas_per_keyword=5)
+        fake_args = SimpleNamespace(dry_run=False, review_designs=True)
 
         with (
             patch.object(cli_module, "_configure_module_path") as mock_configure,
@@ -59,6 +54,5 @@ class TestMain:
         mock_configure.assert_called_once_with()
         fake_run_pipeline.assert_called_once_with(
             dry_run=False,
-            keyword_limit=7,
-            ideas_per_keyword=5,
+            review_designs=True,
         )

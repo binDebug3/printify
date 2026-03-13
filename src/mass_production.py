@@ -79,6 +79,14 @@ def parse_args() -> argparse.Namespace:
         default=2,
         help="Number of generated ideas per keyword",
     )
+    parser.add_argument(
+        "--review-designs",
+        action="store_true",
+        help=(
+            "Open a local browser UI after design generation so you can keep, "
+            "retry, or reject designs before background removal"
+        ),
+    )
     return parser.parse_args()
 
 
@@ -90,8 +98,6 @@ def main() -> None:
     args = parse_args()
     run_pipeline(
         dry_run=args.dry_run,
-        keyword_limit=args.keyword_limit,
-        ideas_per_keyword=args.ideas_per_keyword,
     )
 
 

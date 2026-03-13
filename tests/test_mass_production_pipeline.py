@@ -33,9 +33,7 @@ class TestRunPipeline:
             patch.object(pipeline_module, "log_action") as mock_log,
             patch("builtins.print") as mock_print,
         ):
-            pipeline_module.run_pipeline(
-                dry_run=True, keyword_limit=5, ideas_per_keyword=2
-            )
+            pipeline_module.run_pipeline(dry_run=True)
 
         message = "No ideas marked used=false found in ideas.csv"
         mock_log.assert_called_with(message)
@@ -126,9 +124,13 @@ class TestRunPipeline:
             patch.object(pipeline_module, "_build_idea_object", return_value=idea),
             patch.object(
                 pipeline_module,
-                "_generate_design_assets",
+                "_generate_design_image",
+                return_value=(transparent_path, b"png"),
+            ),
+            patch.object(
+                pipeline_module,
+                "_generate_post_design_assets",
                 return_value=(
-                    transparent_path,
                     transparent_path,
                     mockup_path,
                     mockup_path,
@@ -144,15 +146,125 @@ class TestRunPipeline:
                 pipeline_module, "mark_idea_as_published", return_value=True
             ) as mock_mark,
         ):
-            pipeline_module.run_pipeline(
-                dry_run=False, keyword_limit=1, ideas_per_keyword=9
-            )
+            pipeline_module.run_pipeline(dry_run=False)
 
         mock_mark.assert_called_once_with(
             path=constants.IDEAS_CSV_PATH,
             keyword="alpha",
             shirt_count=constants.IDEAS_PER_KEYWORD,
         )
+
+    def test_manual_background_mode_skips_removebg_secret_lookup(self, tmp_path):
+        """Does not require the remove.bg secret when manual background removal is enabled."""
+        transparent_path = tmp_path / "design_transparent.png"
+        mockup_path = tmp_path / "mockup.png"
+        transparent_path.write_bytes(b"png")
+        mockup_path.write_bytes(b"png")
+
+        idea = Idea(
+            keyword="alpha",
+            original_title="Alpha Shirt",
+            title="Alpha Shirt 1",
+            folder_name="Alpha_Shirt_1",
+            folder_path=tmp_path / "Alpha_Shirt_1",
+            payload={"shirt_colors": ["pepper"]},
+        )
+        mock_printify_client = MagicMock()
+        mock_printify_client.pick_base_price_usd.return_value = 29.45
+        mock_printify_client.upload_image.side_effect = [
+            {"id": "img-1"},
+            {"id": "img-2"},
+        ]
+        mock_printify_client.build_payload.return_value = {
+            "title": "Listing Title 1",
+            "variants": [
+                {"id": 101, "price": 2945, "is_enabled": True, "is_default": True}
+            ],
+        }
+        mock_printify_client.create_product.return_value = {"id": "prod-1"}
+
+        with (
+            patch.object(
+                pipeline_module,
+                "_load_prompts",
+                return_value={
+                    "design": "design prompt",
+                    "image": "image prompt",
+                    "background": "background prompt",
+                    "mockup": "mockup prompt",
+                    "title": "title prompt",
+                    "description": "description prompt",
+                    "keywords": "keywords prompt",
+                    "default_description": "default description",
+                    "filter_design_descriptions": "filter prompt",
+                },
+            ),
+            patch.object(
+                pipeline_module, "read_keywords_from_ideas_csv", return_value=["alpha"]
+            ),
+            patch.object(
+                pipeline_module,
+                "_load_color_to_ids_map",
+                return_value={"pepper": [101]},
+            ),
+            patch.object(
+                pipeline_module,
+                "_require_setting",
+                side_effect=["gemini-key", "printify-token", "shop-id"],
+            ) as mock_require_setting,
+            patch.object(
+                pipeline_module.constants,
+                "BACKGROUND_REMOVAL_MODE",
+                constants.BACKGROUND_REMOVAL_MODE_MANUAL,
+            ),
+            patch.object(pipeline_module, "GeminiClient", return_value=MagicMock()),
+            patch.object(pipeline_module, "RemoveBgClient", return_value=MagicMock()),
+            patch.object(
+                pipeline_module, "PrintifyClient", return_value=mock_printify_client
+            ),
+            patch.object(
+                pipeline_module,
+                "_generate_ideas_for_keyword",
+                return_value=[{"title": "Alpha Shirt"}],
+            ),
+            patch.object(
+                pipeline_module,
+                "_filter_ideas_for_keyword",
+                return_value=(
+                    [{"title": "Alpha Shirt"}],
+                    {
+                        "selected_designs": [
+                            {"index": 0, "pass": True, "rank": 1, "reason": "fit"}
+                        ]
+                    },
+                ),
+            ),
+            patch.object(pipeline_module, "_build_idea_object", return_value=idea),
+            patch.object(
+                pipeline_module,
+                "_generate_design_image",
+                return_value=(transparent_path, b"png"),
+            ),
+            patch.object(
+                pipeline_module,
+                "_generate_post_design_assets",
+                return_value=(transparent_path, mockup_path, mockup_path),
+            ),
+            patch.object(
+                pipeline_module,
+                "_generate_listing_fields",
+                return_value=("Listing Title", "Description", ["tag one", "tag two"]),
+            ),
+            patch.object(pipeline_module, "_select_colors", return_value=["pepper"]),
+            patch.object(pipeline_module, "mark_idea_as_published", return_value=True),
+        ):
+            pipeline_module.run_pipeline(dry_run=False)
+
+        assert mock_require_setting.call_args_list == [
+            (("GEMINI_API_KEY", constants.GEMINI_API_KEY_PATH),),
+            (("PRINTIFY_API_TOKEN", constants.PRINTIFY_API_TOKEN_PATH),),
+            (("PRINTIFY_SHOP_ID", constants.PRINTIFY_SHOP_ID_PATH),),
+        ]
 
     def test_does_not_mark_keyword_published_when_all_ideas_fail(self):
         """Skips ideas.csv updates when no product finishes successfully for the keyword."""
@@ -210,9 +322,7 @@ class TestRunPipeline:
             ),
             patch.object(pipeline_module, "mark_idea_as_published") as mock_mark,
         ):
-            pipeline_module.run_pipeline(
-                dry_run=False, keyword_limit=1, ideas_per_keyword=2
-            )
+            pipeline_module.run_pipeline(dry_run=False)
 
         mock_mark.assert_not_called()
 

@@ -11,6 +11,21 @@ from PIL import Image
 from logger_config import log_action
 
 
+def cut(path: Path, separator: str = "automation") -> str:
+    """
+    Split a Path by a separator and return the last element.
+
+    Args:
+        path: The input Path to split.
+        separator: The separator to use for splitting.
+
+    Returns:
+        The last element after splitting the Path as a string.
+    """
+    parts: List[str] = str(path).split(separator)
+    return parts[-1] if parts else str(path)
+
+
 def read_text(path: Path) -> str:
     """Read UTF-8 text from a file.
 
@@ -20,7 +35,7 @@ def read_text(path: Path) -> str:
     Returns:
         The full file text.
     """
-    log_action(f"Reading text from '{path}'")
+    log_action(f"Reading text from '{cut(path)}'")
     return path.read_text(encoding="utf-8").strip()
 
 
@@ -45,7 +60,7 @@ def read_json(path: Path) -> Any:
     Returns:
         Parsed JSON value.
     """
-    log_action(f"Reading JSON from '{path}'")
+    log_action(f"Reading JSON from '{cut(path)}'")
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
 
@@ -57,7 +72,7 @@ def write_json(path: Path, value: Any) -> None:
         path: Destination JSON path.
         value: Serializable payload.
     """
-    log_action(f"Writing JSON to '{path}'")
+    log_action(f"Writing JSON to '{cut(path)}'")
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         json.dump(value, f, indent=2, ensure_ascii=True)
@@ -70,7 +85,7 @@ def write_bytes(path: Path, data: bytes) -> None:
         path: Destination file path.
         data: Byte payload.
     """
-    log_action(f"Writing bytes to '{path}'")
+    log_action(f"Writing bytes to '{cut(path)}'")
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(data)
 
@@ -85,7 +100,7 @@ def read_keywords_from_ideas_csv(path: Path, limit: int | None = None) -> List[s
     Returns:
         Ordered list of unused keyword strings.
     """
-    log_action(f"Reading keywords from '{path}' with limit={limit}")
+    log_action(f"Reading keywords from '{cut(path)}' with limit={limit}")
     ideas_df: pd.DataFrame = pd.read_csv(path)
     if "idea" not in ideas_df.columns or "used" not in ideas_df.columns:
         return []
@@ -119,7 +134,9 @@ def mark_idea_as_published(
     )
     ideas_df: pd.DataFrame = pd.read_csv(path)
     if "idea" not in ideas_df.columns or "used" not in ideas_df.columns:
-        log_action("ideas.csv is missing required columns 'idea' and/or 'used'; skipping update")
+        log_action(
+            "ideas.csv is missing required columns 'idea' and/or 'used'; skipping update"
+        )
         return False
 
     if "shirt_count" not in ideas_df.columns:
@@ -129,7 +146,9 @@ def mark_idea_as_published(
 
     keyword_series: pd.Series = ideas_df["idea"].astype(str).str.strip()
     used_series: pd.Series = ideas_df["used"].astype(str).str.strip().str.lower()
-    target_mask: pd.Series = (keyword_series == keyword.strip()) & (used_series == "false")
+    target_mask: pd.Series = (keyword_series == keyword.strip()) & (
+        used_series == "false"
+    )
 
     updated_rows: int = int(target_mask.sum())
     if updated_rows == 0:
@@ -137,7 +156,9 @@ def mark_idea_as_published(
         return False
 
     ideas_df.loc[target_mask, "used"] = True
-    ideas_df.loc[target_mask, "shirt_count"] = int(shirt_count)
+    ideas_df.loc[target_mask, "shirt_count"] = ideas_df.loc[
+        target_mask, "shirt_count"
+    ].astype(int) + int(shirt_count)
     ideas_df.loc[target_mask, "publication_date"] = date.today().isoformat()
     ideas_df.to_csv(path, index=False)
     log_action(f"Updated {updated_rows} row(s) in ideas.csv for keyword '{keyword}'")
@@ -239,7 +260,8 @@ def increment_or_append_title_number(title: str) -> str:
 
 
 def unique_versioned_title(title: str, images_dir: Path) -> str:
-    """Always produce a new title based on numbering rules and folder collisions.
+    """
+    Produce a unique title based on numbering rules and folder collisions.
 
     Args:
         title: Input title from idea generation.
@@ -247,11 +269,16 @@ def unique_versioned_title(title: str, images_dir: Path) -> str:
 
     Returns:
         Unique versioned title.
+
     """
-    log_action(f"Generating unique versioned title for '{title}' in '{images_dir}'")
-    candidate: str = increment_or_append_title_number(title)
-    while (images_dir / slugify_title(candidate)).exists():
-        candidate = increment_or_append_title_number(candidate)
+    log_action(f"Generating unique versioned title for '{title}' in '{cut(images_dir)}'")
+    slug: str = slugify_title(title)
+    candidate: str = title
+
+    if (images_dir / slug).exists():
+        candidate = increment_or_append_title_number(title)
+        while (images_dir / slugify_title(candidate)).exists():
+            candidate = increment_or_append_title_number(candidate)
     return candidate
 
 
@@ -282,7 +309,9 @@ def crop_center_percent(input_path: Path, output_path: Path, percent: float) -> 
         square_top: int = (height - square_size) // 2
         square_right: int = square_left + square_size
         square_bottom: int = square_top + square_size
-        square_image = image.crop((square_left, square_top, square_right, square_bottom))
+        square_image = image.crop(
+            (square_left, square_top, square_right, square_bottom)
+        )
 
         # Step 2: center crop the square by requested percent (e.g., 0.8 -> keep inner 80%)
         inner_size: int = max(1, int(square_size * percent))

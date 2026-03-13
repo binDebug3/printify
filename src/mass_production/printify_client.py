@@ -10,6 +10,7 @@ import requests
 
 import constants
 from logger_config import log_action
+from io_utils import cut
 
 
 class PrintifyClient:
@@ -106,7 +107,7 @@ class PrintifyClient:
         log_action(f"Selected colors: {selected_colors}")
         log_action(f"Tags: {tags}")
         log_action(f"Base price (USD): {base_price_usd}")
-        log_action(f"Design image path: '{design_transparent_path}'")
+        log_action(f"Design image path: '{cut(design_transparent_path)}'")
         log_action(f"Uploaded image ID: '{uploaded_image_id}'")
         variants: List[Dict[str, Any]] = []
         variant_ids: List[int] = []
@@ -303,7 +304,7 @@ class PrintifyClient:
                 "file_name": image_path.name,
             }
 
-        log_action(f"Uploading image '{image_path}' to Printify media library")
+        log_action(f"Uploading image '{cut(image_path)}' to Printify media library")
         encoded_contents = base64.b64encode(image_path.read_bytes()).decode("ascii")
         payload: Dict[str, str] = {
             "file_name": image_path.name,

@@ -1,11 +1,13 @@
 """Tests for mass_production client helpers."""
 
+from io import BytesIO
 import sys
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
+from PIL import Image
 
 MASS_PRODUCTION_ROOT = (
     Path(__file__).resolve().parent.parent / "src" / "mass_production"
@@ -216,3 +218,62 @@ class TestRemoveBgClient:
             pytest.raises(RuntimeError, match="remove.bg failed with status 500"),
         ):
             client.remove_background(b"image-bytes")
+
+    def test_remove_background_manual_mode_prefers_white_when_it_removes_more(self):
+        """Uses white-pixel transparency when it removes more pixels than black."""
+        client = remove_bg_module.RemoveBgClient(
+            "key",
+            "https://remove.bg",
+            retries=2,
+            removal_mode="manual",
+        )
+        image = Image.new("RGBA", (2, 2))
+        image.putdata(
+            [
+                (255, 255, 255, 255),
+                (255, 255, 255, 255),
+                (0, 0, 0, 255),
+                (20, 20, 20, 255),
+            ]
+        )
+        input_buffer = BytesIO()
+        image.save(input_buffer, format="PNG")
+
+        result = client.remove_background(input_buffer.getvalue())
+
+        output_image = Image.open(BytesIO(result)).convert("RGBA")
+        assert list(output_image.getdata())[:3] == [
+            (255, 255, 255, 0),
+            (255, 255, 255, 0),
+            (0, 0, 0, 255),
+        ]
+
+    def test_remove_background_manual_mode_prefers_black_when_it_removes_more(self):
+        """Uses black-pixel transparency when it removes more pixels than white."""
+        client = remove_bg_module.RemoveBgClient(
+            "key",
+            "https://remove.bg",
+            retries=2,
+            removal_mode="manual",
+        )
+        image = Image.new("RGBA", (2, 2))
+        image.putdata(
+            [
+                (0, 0, 0, 255),
+                (0, 0, 0, 255),
+                (0, 0, 0, 255),
+                (255, 255, 255, 255),
+            ]
+        )
+        input_buffer = BytesIO()
+        image.save(input_buffer, format="PNG")
+
+        result = client.remove_background(input_buffer.getvalue())
+
+        output_image = Image.open(BytesIO(result)).convert("RGBA")
+        assert list(output_image.getdata()) == [
+            (0, 0, 0, 0),
+            (0, 0, 0, 0),
+            (0, 0, 0, 0),
+            (255, 255, 255, 255),
+        ]

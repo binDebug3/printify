@@ -11,6 +11,7 @@ from typing import Any, List, Dict
 from logger_config import log_action
 
 import constants
+from design_review_ui import review_generated_designs
 from gemini_client import GeminiClient
 from io_utils import (
     crop_center_percent,
@@ -25,6 +26,7 @@ from io_utils import (
     write_bytes,
     write_json,
     write_text,
+    cut,
 )
 from models import Idea
 from printify_client import PrintifyClient
@@ -346,35 +348,54 @@ def _save_idea_json(idea: Idea) -> None:
     """
     write_json(idea.folder_path / "ideas.json", [idea.payload])
     log_action(
-        f"Saved idea JSON for '{idea.title}' to '{idea.folder_path / 'ideas.json'}'"
+        f"Saved idea JSON for '{idea.title}' to '{cut(idea.folder_path / 'ideas.json')}'"
     )
 
 
-def _generate_design_assets(
+def _generate_design_image(
+    idea: Idea,
+    prompts: dict[str, str],
+    gemini: GeminiClient,
+) -> tuple[Path, bytes]:
+    """Generate and save the primary design image for an idea.
+
+    Args:
+        idea: Idea model.
+        prompts: Prompt templates.
+        gemini: Gemini client.
+
+    Returns:
+        Tuple containing the design path and image bytes.
+    """
+    idea_json: str = json.dumps(idea.payload, indent=2)
+    design_prompt: str = f"{prompts['image']}\n\nIdea JSON:\n{idea_json}"
+    log_action(f"Generating design image for '{idea.title}'")
+    design_bytes: bytes = gemini.generate_image(design_prompt)
+    design_path: Path = idea.folder_path / "design.png"
+    write_bytes(design_path, design_bytes)
+    return design_path, design_bytes
+
+
+def _generate_post_design_assets(
     idea: Idea,
     prompts: dict[str, str],
     gemini: GeminiClient,
     remove_bg_client: RemoveBgClient,
-) -> tuple[Path, Path, Path, Path]:
-    """Create design, transparent design, mockup, and cropped mockup assets.
+    design_bytes: bytes,
+) -> tuple[Path, Path, Path]:
+    """Create transparent design, mockup, and cropped mockup assets.
 
     Args:
         idea: Idea model.
         prompts: Prompt templates.
         gemini: Gemini client.
         remove_bg_client: remove.bg client.
+        design_bytes: Generated design bytes.
 
     Returns:
-        Tuple of paths: design, transparent, mockup, mockup_cropped.
+        Tuple of paths: transparent, mockup, mockup_cropped.
     """
     idea_json: str = json.dumps(idea.payload, indent=2)
-
-    # design image
-    design_prompt: str = f"{prompts['image']}\n\nIdea JSON:\n{idea_json}"
-    log_action(f"Generating design image for '{idea.title}'")
-    design_bytes = gemini.generate_image(design_prompt)
-    design_path = idea.folder_path / "design.png"
-    write_bytes(design_path, design_bytes)
 
     # remove background
     log_action(f"Removing background from design for '{idea.title}'")
@@ -414,7 +435,108 @@ def _generate_design_assets(
     )
     crop_center_percent(mockup_path, mockup_cropped_path, constants.CROP_CENTER_PERCENT)
 
-    return design_path, transparent_path, mockup_path, mockup_cropped_path
+    return transparent_path, mockup_path, mockup_cropped_path
+
+
+def _run_manual_design_review(
+    keyword: str,
+    design_entries: list[dict[str, Any]],
+    prompts: dict[str, str],
+    gemini: GeminiClient,
+    max_retries: int,
+) -> list[dict[str, Any]]:
+    """Run manual keep/retry/reject review for generated designs.
+
+    Args:
+        keyword: Source keyword.
+        design_entries: Generated design entries and idea payloads.
+        prompts: Prompt templates.
+        gemini: Gemini client.
+        max_retries: Maximum retries per design.
+
+    Returns:
+        List of design entries approved for downstream processing.
+    """
+    selected_entries: list[dict[str, Any]] = []
+    rejected_indexes: set[int] = set()
+    pending_indexes: list[int] = [entry["review_index"] for entry in design_entries]
+    by_index: dict[int, dict[str, Any]] = {
+        int(entry["review_index"]): entry for entry in design_entries
+    }
+    decision_log: list[dict[str, Any]] = []
+
+    while pending_indexes:
+        ui_payload: list[dict[str, Any]] = []
+        for review_index in pending_indexes:
+            entry = by_index[review_index]
+            idea: Idea = entry["idea"]
+            ui_payload.append(
+                {
+                    "index": review_index,
+                    "idea_index": int(entry["idea_index"]),
+                    "title": idea.title,
+                    "retry_count": int(entry["retry_count"]),
+                    "image_path": str(entry["design_path"]),
+                }
+            )
+
+        decisions: dict[int, str] = review_generated_designs(
+            keyword=keyword,
+            designs=ui_payload,
+        )
+
+        next_pending_indexes: list[int] = []
+        for review_index in pending_indexes:
+            decision: str = decisions.get(review_index, "keep")
+            entry = by_index[review_index]
+            idea = entry["idea"]
+            decision_log.append(
+                {
+                    "index": review_index,
+                    "idea_index": int(entry["idea_index"]),
+                    "title": idea.title,
+                    "decision": decision,
+                    "retry_count": int(entry["retry_count"]),
+                }
+            )
+
+            if decision == "keep":
+                selected_entries.append(entry)
+                continue
+            if decision == "reject":
+                rejected_indexes.add(review_index)
+                continue
+
+            retry_count: int = int(entry["retry_count"])
+            if retry_count >= max_retries:
+                rejected_indexes.add(review_index)
+                log_action(
+                    f"Review retry limit reached for '{idea.title}' (max={max_retries}); rejecting"
+                )
+                continue
+
+            _, design_bytes = _generate_design_image(
+                idea=idea,
+                prompts=prompts,
+                gemini=gemini,
+            )
+            entry["design_bytes"] = design_bytes
+            entry["retry_count"] = retry_count + 1
+            next_pending_indexes.append(review_index)
+
+        pending_indexes = next_pending_indexes
+
+    review_summary: dict[str, Any] = {
+        "keyword": keyword,
+        "selected_indexes": [int(entry["review_index"]) for entry in selected_entries],
+        "rejected_indexes": sorted(int(index) for index in rejected_indexes),
+        "decisions": decision_log,
+    }
+    write_json(
+        constants.IMAGES_DIR / f"{slugify_title(keyword)}_design_review.json",
+        review_summary,
+    )
+    return selected_entries
 
 
 def _generate_listing_fields(
@@ -493,19 +615,17 @@ def _select_colors(idea: Idea, color_to_ids: Dict[str, List[int]]) -> List[str]:
 
 def run_pipeline(
     dry_run: bool,
-    keyword_limit: int,
-    ideas_per_keyword: int,
+    review_designs: bool = False,
 ) -> None:
     """Run the full generation pipeline for ideas, assets, listings, and payloads.
 
     Args:
         dry_run: If true, skip real Printify product creation.
-        keyword_limit: Maximum keywords to process this run.
-        ideas_per_keyword: Number of ideas to generate per keyword.
+        review_designs: If true, open interactive review UI before background removal.
     """
     prompts: Dict[str, str] = _load_prompts()
     keywords: List[str] = read_keywords_from_ideas_csv(
-        constants.IDEAS_CSV_PATH, limit=keyword_limit
+        constants.IDEAS_CSV_PATH, limit=constants.MAX_KEYWORDS_PER_RUN
     )
     color_to_ids: Dict[str, List[int]] = _load_color_to_ids_map(
         constants.VARIANT_MAP_PATH
@@ -518,9 +638,12 @@ def run_pipeline(
         return
 
     gemini_key: str = _require_setting("GEMINI_API_KEY", constants.GEMINI_API_KEY_PATH)
-    removebg_key: str = _require_setting(
-        "REMOVEBG_API_KEY", constants.REMOVEBG_API_KEY_PATH
-    )
+    background_removal_mode: str = constants.BACKGROUND_REMOVAL_MODE.strip().lower()
+    removebg_key: str = ""
+    if background_removal_mode == constants.BACKGROUND_REMOVAL_MODE_API:
+        removebg_key = _require_setting(
+            "REMOVEBG_API_KEY", constants.REMOVEBG_API_KEY_PATH
+        )
     printify_token: str = _require_setting(
         "PRINTIFY_API_TOKEN", constants.PRINTIFY_API_TOKEN_PATH
     )
@@ -538,6 +661,7 @@ def run_pipeline(
         api_key=removebg_key,
         endpoint=constants.REMOVE_BG_URL,
         retries=constants.MAX_REMOVEBG_RETRIES,
+        removal_mode=background_removal_mode,
     )
     printify_client: PrintifyClient = PrintifyClient(
         token=printify_token,
@@ -555,14 +679,14 @@ def run_pipeline(
     )
 
     for keyword in keywords:
-        log_action(f"Processing keyword: {keyword}")
+        log_action(f"Processing keyword: '{keyword}'")
         successful_products_count: int = 0
         try:
             raw_ideas: List[Dict[str, Any]] = _generate_ideas_for_keyword(
                 gemini=gemini,
                 design_prompt=prompts["design"],
                 keyword=keyword,
-                ideas_per_keyword=ideas_per_keyword,
+                ideas_per_keyword=constants.IDEAS_PER_KEYWORD,
             )
             filtered_ideas, filter_metadata = _filter_ideas_for_keyword(
                 gemini=gemini,
@@ -579,17 +703,64 @@ def run_pipeline(
             log_action(f"Failed to generate ideas for '{keyword}': {exc}")
             continue
 
-        for raw_idea in filtered_ideas:
+        generated_designs: list[dict[str, Any]] = []
+        for idea_index, raw_idea in enumerate(filtered_ideas):
             try:
                 idea: Idea = _build_idea_object(raw_idea=raw_idea, keyword=keyword)
                 idea.folder_path.mkdir(parents=True, exist_ok=True)
                 _save_idea_json(idea)
 
-                _, transparent_path, _, mockup_cropped_path = _generate_design_assets(
+                design_path, design_bytes = _generate_design_image(
+                    idea=idea,
+                    prompts=prompts,
+                    gemini=gemini,
+                )
+
+                if "generated_designs" not in locals():
+                    generated_designs: list[dict[str, Any]] = []
+                generated_designs.append(
+                    {
+                        "review_index": len(generated_designs),
+                        "idea_index": idea_index,
+                        "idea": idea,
+                        "design_path": design_path,
+                        "design_bytes": design_bytes,
+                        "retry_count": 0,
+                    }
+                )
+
+            except Exception as exc:  # noqa: BLE001
+                log_action(f"Failed processing idea for keyword '{keyword}': {exc}")
+                continue
+
+        if not generated_designs:
+            log_action(f"No designs generated for keyword '{keyword}'")
+            continue
+
+        approved_designs: list[dict[str, Any]] = generated_designs
+        if review_designs:
+            try:
+                approved_designs = _run_manual_design_review(
+                    keyword=keyword,
+                    design_entries=generated_designs,
+                    prompts=prompts,
+                    gemini=gemini,
+                    max_retries=constants.DESIGN_REVIEW_MAX_RETRIES,
+                )
+            except Exception as exc:  # noqa: BLE001
+                log_action(f"Manual design review failed for '{keyword}': {exc}")
+                continue
+
+        for design_entry in approved_designs:
+            try:
+                idea: Idea = design_entry["idea"]
+                design_bytes: bytes = design_entry["design_bytes"]
+                transparent_path, _, mockup_cropped_path = _generate_post_design_assets(
                     idea=idea,
                     prompts=prompts,
                     gemini=gemini,
                     remove_bg_client=remove_bg_client,
+                    design_bytes=design_bytes,
                 )
 
                 listing_title, description, tags = _generate_listing_fields(

@@ -23,3 +23,21 @@ class Idea:
     folder_name: str
     folder_path: Path
     payload: dict
+
+
+@dataclass
+class EtsyConfig:
+    """Normalized Etsy API configuration.
+
+    Attributes:
+        api_key: Etsy application keystring used for the x-api-key header.
+        shared_secret: Etsy application shared secret.
+        refresh_token: OAuth refresh token.
+        access_token: OAuth access token.
+        shop_id: Etsy shop identifier.
+    """
+    api_key: str
+    shared_secret: str
+    refresh_token: str
+    access_token: str
+    shop_id: str

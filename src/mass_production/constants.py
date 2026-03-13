@@ -1,6 +1,7 @@
 """Configuration constants for the mass production automation pipeline."""
 
 from pathlib import Path
+import re
 
 # Paths
 AUTOMATION_ROOT: Path = Path(__file__).resolve().parents[3]
@@ -64,3 +65,13 @@ KEYWORDS_COUNT: int = 10
 MAX_ALLOWED_TAGS: int = 13
 KEYWORD_MAX_LENGTH: int = 20
 CROP_CENTER_PERCENT: float = 0.8
+
+# Etsy mockup sync
+ETSY_API_BASE_URL: str = "https://openapi.etsy.com/v3/application"
+ETSY_OAUTH_TOKEN_URL: str = "https://api.etsy.com/v3/public/oauth/token"
+PRINTIFY_API_BASE_URL: str = "https://api.printify.com/v1"
+DEFAULT_ETSY_CONFIG_PATH: Path = META_DIR / "etsy_api_key.json"
+MOCKUP_FILE_PATTERN: re.Pattern[str] = re.compile(
+    r"^mockup_\(.+\)_cropped\.png$",
+    re.IGNORECASE,
+)

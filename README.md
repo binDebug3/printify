@@ -28,6 +28,7 @@ The repository uses CSV- and file-based configuration under the workspace root, 
 
 - Scheduled Etsy publishing from `data/schedule.csv` through the Printify publish API.
 - CSV write-back of `publish_status` after successful scheduled publishes.
+- Delayed Etsy mockup sync after publish, using `data/images/<nick_name>/mockup_(color)_cropped.png` as the primary listing image.
 - Optional Gmail notifications when scheduled products go live.
 - Product utility commands for listing shop products and generating color-to-variant maps.
 - Mass production pipeline driven by `data/ideas.csv` and prompt templates in `data/prompts`.
@@ -54,6 +55,7 @@ printify/
         publish.py
         tools.py
         mass_production/
+            add_etsy_mockup.py
             constants.py
             gemini_client.py
             io_utils.py
@@ -104,6 +106,7 @@ Required data and config files:
 - `../meta/shop_id.txt` for the Printify shop ID.
 - `../meta/gemini_api_key.txt` for the Gemini API key.
 - `../meta/removebg_api_key.txt` for the remove.bg API key.
+- `../meta/etsy_api_key.json` for Etsy API credentials and Etsy shop ID.
 - `../meta/email_address.txt` for the notification recipient.
 - `../meta/cal_credentials.json` for Gmail OAuth credentials.
 
@@ -153,7 +156,8 @@ What it does:
 4. Publishes remaining drafts through Printify.
 5. Marks successful rows as published.
 6. Sends notification emails when configured.
-7. Writes the updated schedule back to disk.
+7. Waits one minute, then uploads the matching custom mockup to the Etsy listing.
+8. Writes the updated schedule back to disk.
 
 ### Shop utilities
 

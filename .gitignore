@@ -5,6 +5,12 @@ __pycache__/
 
 # Custom
 tests/artifacts/
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.json
+*.csv
 
 # C extensions
 *.so

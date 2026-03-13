@@ -3,6 +3,7 @@
 import json
 import os
 import re
+import time
 
 # import random
 from pathlib import Path
@@ -11,6 +12,7 @@ from typing import Any, List, Dict
 from logger_config import log_action
 
 import constants
+from design_crop import crop_design_image_to_content
 from design_review_ui import review_generated_designs
 from gemini_client import GeminiClient
 from io_utils import (
@@ -370,7 +372,11 @@ def _generate_design_image(
     idea_json: str = json.dumps(idea.payload, indent=2)
     design_prompt: str = f"{prompts['image']}\n\nIdea JSON:\n{idea_json}"
     log_action(f"Generating design image for '{idea.title}'")
-    design_bytes: bytes = gemini.generate_image(design_prompt)
+    generated_design_bytes: bytes = gemini.generate_image(design_prompt)
+    design_bytes: bytes = crop_design_image_to_content(
+        image_bytes=generated_design_bytes,
+        padding_percent=constants.DESIGN_CROP_PADDING_PERCENT,
+    )
     design_path: Path = idea.folder_path / "design.png"
     write_bytes(design_path, design_bytes)
     return design_path, design_bytes
@@ -615,13 +621,11 @@ def _select_colors(idea: Idea, color_to_ids: Dict[str, List[int]]) -> List[str]:
 
 def run_pipeline(
     dry_run: bool,
-    review_designs: bool = False,
 ) -> None:
     """Run the full generation pipeline for ideas, assets, listings, and payloads.
 
     Args:
         dry_run: If true, skip real Printify product creation.
-        review_designs: If true, open interactive review UI before background removal.
     """
     prompts: Dict[str, str] = _load_prompts()
     keywords: List[str] = read_keywords_from_ideas_csv(
@@ -678,8 +682,8 @@ def run_pipeline(
         retries=constants.MAX_PRINTIFY_RETRIES,
     )
 
-    for keyword in keywords:
-        log_action(f"Processing keyword: '{keyword}'")
+    for idx, keyword in enumerate(keywords):
+        log_action(f"Processing keyword ({idx}/{len(keywords)}): '{keyword}'")
         successful_products_count: int = 0
         try:
             raw_ideas: List[Dict[str, Any]] = _generate_ideas_for_keyword(
@@ -704,8 +708,14 @@ def run_pipeline(
             continue
 
         generated_designs: list[dict[str, Any]] = []
+        n_ideas: int = len(filtered_ideas)
+        loop_start_time: float = time.monotonic()
+        completed_iterations: int = 0
         for idea_index, raw_idea in enumerate(filtered_ideas):
+            iteration_start_time: float = time.monotonic()
+            iteration_status: str = "success"
             try:
+                log_action(f"Processing idea {idea_index}/{n_ideas}")
                 idea: Idea = _build_idea_object(raw_idea=raw_idea, keyword=keyword)
                 idea.folder_path.mkdir(parents=True, exist_ok=True)
                 _save_idea_json(idea)
@@ -730,15 +740,40 @@ def run_pipeline(
                 )
 
             except Exception as exc:  # noqa: BLE001
+                iteration_status = f"failed: {exc}"
                 log_action(f"Failed processing idea for keyword '{keyword}': {exc}")
                 continue
+            finally:
+                completed_iterations += 1
+                elapsed_time_seconds: float = time.monotonic() - loop_start_time
+                average_iteration_seconds: float = (
+                    elapsed_time_seconds / completed_iterations
+                )
+                estimated_total_seconds: float = average_iteration_seconds * n_ideas
+                estimated_remaining_seconds: float = max(
+                    estimated_total_seconds - elapsed_time_seconds,
+                    0.0,
+                )
+                iteration_duration_seconds: float = (
+                    time.monotonic() - iteration_start_time
+                )
+                log_action(
+                    "Filtered-idea timing | "
+                    f"keyword='{keyword}' | "
+                    f"iteration={completed_iterations}/{n_ideas} | "
+                    f"status='{iteration_status}' | "
+                    f"iteration_seconds={iteration_duration_seconds:.1f} | "
+                    f"elapsed_seconds={elapsed_time_seconds:.1f} | "
+                    f"estimated_remaining_seconds={estimated_remaining_seconds:.1f} | "
+                    f"estimated_total_seconds={estimated_total_seconds:.1f}"
+                )
 
         if not generated_designs:
             log_action(f"No designs generated for keyword '{keyword}'")
             continue
 
         approved_designs: list[dict[str, Any]] = generated_designs
-        if review_designs:
+        if constants.REVIEW_DESIGNS:
             try:
                 approved_designs = _run_manual_design_review(
                     keyword=keyword,

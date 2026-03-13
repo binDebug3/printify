@@ -2,7 +2,7 @@
 
 Run this test manually to generate image artifacts:
 
-    VISUAL_BG_RUN=1 pytest tests/test_manual_background_visual.py -q -s
+$env:VISUAL_BG_RUN='1'; python -m pytest tests/manual/manual_background_visual.py -q -s
 
 Set VISUAL_BG_OPEN=1 to request opening the generated images in the default viewer.
 """
@@ -11,11 +11,12 @@ import os
 import sys
 from io import BytesIO
 from pathlib import Path
+from typing import Iterable, Optional, cast
 
 import pytest
 from PIL import Image
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 MASS_PRODUCTION_ROOT = PROJECT_ROOT / "src" / "mass_production"
 if str(MASS_PRODUCTION_ROOT) not in sys.path:
     sys.path.insert(0, str(MASS_PRODUCTION_ROOT))
@@ -26,7 +27,7 @@ import remove_bg as remove_bg_module  # noqa: E402
 ARTIFACTS_DIR = PROJECT_ROOT / "tests" / "artifacts"
 
 
-def _find_sample_design_png() -> Path | None:
+def _find_sample_design_png() -> Optional[Path]:
     """Find one real design.png in data/images for visual testing.
 
     Returns:
@@ -73,7 +74,11 @@ def test_manual_background_removal_visual_artifacts() -> None:
     processed_artifact.write_bytes(processed_bytes)
 
     processed_image = Image.open(BytesIO(processed_bytes)).convert("RGBA")
-    alpha_values = [pixel[3] for pixel in processed_image.getdata()]
+    processed_pixels: Iterable[tuple[int, int, int, int]] = cast(
+        Iterable[tuple[int, int, int, int]],
+        processed_image.getdata(),
+    )
+    alpha_values = [pixel[3] for pixel in processed_pixels]
     transparent_pixels = sum(1 for alpha in alpha_values if alpha == 0)
     alpha_mask = processed_image.getchannel("A")
     alpha_mask.save(alpha_mask_artifact)

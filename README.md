@@ -181,6 +181,18 @@ cd printify
 python src/tools.py get_printify_variant_ids
 ```
 
+Browse all posted Printify products in a local visual UI (tiles with mockups and titles):
+
+```bash
+cd printify
+python src/mass_production/show_products.py
+```
+
+Required environment variables for this viewer:
+
+- `PRINTIFY_API_TOKEN`
+- `PRINTIFY_SHOP_ID`
+
 ### Mass production
 
 Run the generation pipeline:
@@ -204,13 +216,23 @@ cd printify
 python src/mass_production.py --review-designs
 ```
 
+To open just the manual review UI against a few existing sample folders without
+running the rest of the pipeline:
+
+```bash
+cd printify
+python tests/manual/manual_review_ui_runner.py
+```
+
 What the mass production pipeline does:
 
 1. Reads unused keywords from `data/ideas.csv`.
 2. Generates ideas from the prompt templates.
 3. Filters generated ideas using `data/prompts/filter_design_descriptions.txt`, then stores filter metadata in `data/images/<keyword_slug>_filtering.json`.
 4. Generates design images for the filtered ideas.
-5. Optional `--review-designs` step: opens a local browser UI to keep, retry once, or reject each design before background removal. The review summary is saved to `data/images/<keyword_slug>_design_review.json`.
+    The pipeline automatically detects the design bounding box and crops excess
+    whitespace with 5% padding before saving `design.png`.
+5. Optional `--review-designs` step: opens a local browser UI to keep, retry once, or reject each design before background removal. You can click any design image to expand it, drag the expanded preview around, and submit decisions with an automatic close attempt after submit. The review summary is saved to `data/images/<keyword_slug>_design_review.json`.
 6. Produces transparent artwork and mockups.
 7. Generates listing title, description, personas, and keyword tags.
 8. Builds Printify payloads and optionally creates draft products.
@@ -237,6 +259,13 @@ Run the full test suite:
 ```bash
 cd printify
 pytest
+```
+
+Run the manual-only crop smoke test (not included in default `pytest` discovery):
+
+```bash
+cd printify
+python -m pytest tests/manual/manual_design_crop.py::test_manual_crop_random_design_image -s
 ```
 
 ## Contributors

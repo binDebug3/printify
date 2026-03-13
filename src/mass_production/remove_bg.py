@@ -1,13 +1,22 @@
 """Background removal helpers for the mass production pipeline."""
 
+import argparse
 from io import BytesIO
+import sys
 import time
+from pathlib import Path
 from typing import Dict, Tuple
 
 from PIL import Image
 import requests
 
-from logger_config import log_action
+try:
+    from logger_config import log_action
+except ModuleNotFoundError:
+    SRC_ROOT = Path(__file__).resolve().parents[1]
+    if str(SRC_ROOT) not in sys.path:
+        sys.path.insert(0, str(SRC_ROOT))
+    from logger_config import log_action
 
 
 class RemoveBgClient:
@@ -126,30 +135,126 @@ class RemoveBgClient:
         self,
         image: Image.Image,
         target_rgb: tuple[int, int, int],
-        threshold: int = 70  # Adjust this to catch the "static"
+        threshold: int = 80,  # Adjust this to catch the "static"
     ) -> tuple[bytes, int]:
-        
+
         # Ensure image is in RGBA mode to support transparency
         output_image = image.convert("RGBA")
         data = output_image.getdata()
-        
+
         new_data = []
         transparent_count = 0
-        
+
         for item in data:  # type: ignore
             # Calculate the Euclidean distance between colors
             # item[0]=R, item[1]=G, item[2]=B
             dist = sum((a - b) ** 2 for a, b in zip(item[:3], target_rgb)) ** 0.5
-            
+
             if dist < threshold:
                 # Match found within threshold: set Alpha to 0
                 new_data.append((item[0], item[1], item[2], 0))
                 transparent_count += 1
             else:
                 new_data.append(item)
-                
+
         output_image.putdata(new_data)
-        
+
         output_buffer = BytesIO()
         output_image.save(output_buffer, format="PNG")
         return output_buffer.getvalue(), transparent_count
+
+
+def _parse_args() -> argparse.Namespace:
+    """Parse CLI arguments for manual background removal.
+
+    Returns:
+        Parsed command-line arguments.
+    """
+    log_action("Parsing CLI arguments for remove_bg manual execution")
+    parser = argparse.ArgumentParser(
+        description=(
+            "Manually remove background from a PNG and replace the matching "
+            "design*cropped.png in the same folder."
+        )
+    )
+    parser.add_argument(
+        "image_path",
+        type=Path,
+        help="Path to a source PNG image.",
+    )
+    return parser.parse_args()
+
+
+def _resolve_output_path(source_path: Path) -> Path:
+    """Resolve which design*cropped.png file should be replaced.
+
+    Args:
+        source_path: Source PNG path passed from CLI.
+
+    Returns:
+        Target output path to be overwritten.
+
+    Raises:
+        FileNotFoundError: If no design*cropped.png exists in the source folder.
+    """
+    log_action(f"Resolving output path for source image '{source_path}'")
+    matching_paths = sorted(source_path.parent.glob("design*cropped.png"))
+
+    if source_path.name.startswith("design") and source_path.name.endswith(
+        "cropped.png"
+    ):
+        return source_path
+
+    if not matching_paths:
+        raise FileNotFoundError(
+            "No output target found. Expected a file matching "
+            f"'design*cropped.png' in '{source_path.parent}'."
+        )
+
+    return matching_paths[0]
+
+
+def _run_manual_cli(image_path: Path) -> Path:
+    """Run manual background removal from CLI and overwrite target image.
+
+    Args:
+        image_path: Source PNG image path.
+
+    Returns:
+        Path of the overwritten output image.
+
+    Raises:
+        FileNotFoundError: If source image does not exist or no cropped target exists.
+        ValueError: If source file is not a PNG.
+    """
+    log_action(f"Starting CLI manual background removal for '{image_path}'")
+    if not image_path.exists():
+        raise FileNotFoundError(f"Source image does not exist: {image_path}")
+    if image_path.suffix.lower() != ".png":
+        raise ValueError(f"Expected a .png file, got: {image_path.name}")
+
+    output_path = _resolve_output_path(source_path=image_path)
+    source_bytes = image_path.read_bytes()
+
+    client = RemoveBgClient(
+        api_key="",
+        endpoint="",
+        retries=1,
+        removal_mode="manual",
+    )
+    processed_bytes = client.remove_background(source_bytes)
+    output_path.write_bytes(processed_bytes)
+    log_action(f"Manual background removal saved to '{output_path}'")
+    print(f"Saved manual background-removed image to: {output_path}")
+    return output_path
+
+
+def main() -> None:
+    """CLI entry point for manual background removal."""
+    log_action("Running remove_bg.py as a CLI tool")
+    args = _parse_args()
+    _run_manual_cli(image_path=args.image_path)
+
+
+if __name__ == "__main__":
+    main()

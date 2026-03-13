@@ -2,6 +2,7 @@
 
 import sys
 from pathlib import Path
+from types import ModuleType, SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 MASS_PRODUCTION_ROOT = (
@@ -9,6 +10,17 @@ MASS_PRODUCTION_ROOT = (
 )
 if str(MASS_PRODUCTION_ROOT) not in sys.path:
     sys.path.insert(0, str(MASS_PRODUCTION_ROOT))
+
+google_module = ModuleType("google")
+genai_module = ModuleType("google.genai")
+genai_module.Client = MagicMock()
+genai_module.types = SimpleNamespace()
+google_module.genai = genai_module
+gemini_client_module = ModuleType("gemini_client")
+gemini_client_module.GeminiClient = MagicMock()
+sys.modules.setdefault("google", google_module)
+sys.modules.setdefault("google.genai", genai_module)
+sys.modules.setdefault("gemini_client", gemini_client_module)
 
 from models import Idea  # noqa: E402
 import constants  # noqa: E402
@@ -354,3 +366,39 @@ class TestRunPipeline:
         assert filtered_ideas[1]["title"] == "Idea 3"
         assert "selected_designs" in metadata
         assert len(metadata["selected_designs"]) == 4
+
+
+class TestGenerateDesignImage:
+    """Tests for design image generation and auto-cropping."""
+
+    def test_generate_design_image_crops_before_writing(self, tmp_path):
+        """Runs the generated image through the content cropper before saving."""
+        idea = Idea(
+            keyword="alpha",
+            original_title="Alpha Shirt",
+            title="Alpha Shirt 1",
+            folder_name="Alpha_Shirt_1",
+            folder_path=tmp_path / "Alpha_Shirt_1",
+            payload={"title": "Alpha Shirt 1"},
+        )
+        gemini = MagicMock()
+        gemini.generate_image.return_value = b"raw-image"
+
+        with patch.object(
+            pipeline_module,
+            "crop_design_image_to_content",
+            return_value=b"cropped-image",
+        ) as mock_crop:
+            design_path, design_bytes = pipeline_module._generate_design_image(
+                idea=idea,
+                prompts={"image": "image prompt"},
+                gemini=gemini,
+            )
+
+        mock_crop.assert_called_once_with(
+            image_bytes=b"raw-image",
+            padding_percent=constants.DESIGN_CROP_PADDING_PERCENT,
+        )
+        assert design_path == idea.folder_path / "design.png"
+        assert design_path.read_bytes() == b"cropped-image"
+        assert design_bytes == b"cropped-image"

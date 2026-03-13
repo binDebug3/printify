@@ -1,10 +1,17 @@
 """Gemini API wrapper for text and image generation."""
 
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
+from io import BytesIO
 import time
 from typing import Optional
 
 from google import genai
 from google.genai import types
+from PIL import Image
+
+
+IMAGE_GENERATION_TIMEOUT_SECONDS: int = 180
+FALLBACK_IMAGE_SIZE: tuple[int, int] = (1024, 1024)
 
 
 class GeminiClient:
@@ -17,7 +24,9 @@ class GeminiClient:
         retries: Maximum attempts for transient failures.
     """
 
-    def __init__(self, api_key: str, text_model: str, image_model: str, retries: int = 3):
+    def __init__(
+        self, api_key: str, text_model: str, image_model: str, retries: int = 3
+    ):
         self._client = genai.Client(api_key=api_key)
         self._text_model = text_model
         self._image_model = image_model
@@ -86,15 +95,22 @@ class GeminiClient:
         last_error: Optional[Exception] = None
         for attempt in range(self._retries):
             try:
-                response = self._client.models.generate_content(
-                    model=self._image_model,
-                    contents=contents,
-                    config=types.GenerateContentConfig(response_modalities=["IMAGE", "TEXT"]),
-                )
+                with ThreadPoolExecutor(max_workers=1) as executor:
+                    future = executor.submit(
+                        self._client.models.generate_content,
+                        model=self._image_model,
+                        contents=contents,
+                        config=types.GenerateContentConfig(
+                            response_modalities=["IMAGE", "TEXT"],
+                        ),
+                    )
+                    response = future.result(timeout=IMAGE_GENERATION_TIMEOUT_SECONDS)
                 image_data = self._extract_image_bytes(response)
                 if image_data:
                     return image_data
                 raise RuntimeError("Gemini returned no image data")
+            except FuturesTimeoutError:
+                return self._create_black_image(image_bytes=image_bytes)
             except Exception as exc:  # noqa: BLE001
                 last_error = exc
                 if attempt < self._retries - 1:
@@ -103,6 +119,26 @@ class GeminiClient:
                 raise
 
         raise RuntimeError(f"Gemini image generation failed: {last_error}")
+
+    @staticmethod
+    def _create_black_image(image_bytes: bytes | None = None) -> bytes:
+        """Create a blank black PNG image as a timeout fallback.
+
+        Args:
+            image_bytes: Optional source image bytes used to preserve output size.
+
+        Returns:
+            PNG bytes of a black image.
+        """
+        image_size = FALLBACK_IMAGE_SIZE
+        if image_bytes is not None:
+            with Image.open(BytesIO(image_bytes)) as source_image:
+                image_size = source_image.size
+
+        fallback_image = Image.new("RGBA", image_size, (0, 0, 0, 255))
+        output_buffer = BytesIO()
+        fallback_image.save(output_buffer, format="PNG")
+        return output_buffer.getvalue()
 
     @staticmethod
     def _extract_image_bytes(response: object) -> bytes | None:

@@ -43,16 +43,57 @@ class TestMain:
         fake_run_pipeline = MagicMock()
         fake_pipeline_module = SimpleNamespace(run_pipeline=fake_run_pipeline)
         fake_args = SimpleNamespace(dry_run=False, review_designs=True)
+        fake_constants_module = SimpleNamespace(
+            REVIEW_DESIGNS=True,
+            IDEAS_PER_KEYWORD=20,
+            FILTERED_IDEAS_PER_KEYWORD=10,
+            BACKGROUND_REMOVAL_MODE="manual",
+        )
 
         with (
             patch.object(cli_module, "_configure_module_path") as mock_configure,
             patch.object(cli_module, "parse_args", return_value=fake_args),
-            patch.dict(sys.modules, {"pipeline": fake_pipeline_module}),
+            patch.object(cli_module, "_confirm_runtime_settings", return_value=True),
+            patch.dict(
+                sys.modules,
+                {
+                    "pipeline": fake_pipeline_module,
+                    "constants": fake_constants_module,
+                },
+            ),
         ):
             cli_module.main()
 
         mock_configure.assert_called_once_with()
         fake_run_pipeline.assert_called_once_with(
             dry_run=False,
-            review_designs=True,
         )
+
+    def test_main_aborts_when_user_rejects_settings(self):
+        """Stops before pipeline execution when runtime setting confirmation is rejected."""
+        fake_run_pipeline = MagicMock()
+        fake_pipeline_module = SimpleNamespace(run_pipeline=fake_run_pipeline)
+        fake_args = SimpleNamespace(dry_run=True, review_designs=False)
+        fake_constants_module = SimpleNamespace(
+            REVIEW_DESIGNS=True,
+            IDEAS_PER_KEYWORD=20,
+            FILTERED_IDEAS_PER_KEYWORD=10,
+            BACKGROUND_REMOVAL_MODE="manual",
+        )
+
+        with (
+            patch.object(cli_module, "_configure_module_path") as mock_configure,
+            patch.object(cli_module, "parse_args", return_value=fake_args),
+            patch.object(cli_module, "_confirm_runtime_settings", return_value=False),
+            patch.dict(
+                sys.modules,
+                {
+                    "pipeline": fake_pipeline_module,
+                    "constants": fake_constants_module,
+                },
+            ),
+        ):
+            cli_module.main()
+
+        mock_configure.assert_called_once_with()
+        fake_run_pipeline.assert_not_called()

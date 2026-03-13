@@ -2,6 +2,7 @@
 
 import json
 import threading
+import time
 import webbrowser
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -100,9 +101,37 @@ def _build_html(keyword: str) -> str:
       background: var(--card);
       box-shadow: var(--shadow);
       overflow: hidden;
-      transform: translateY(8px);
+      position: relative;
+      transform-origin: center center;
       opacity: 0;
       animation: reveal 420ms ease forwards;
+      will-change: transform;
+      transition:
+        transform 180ms cubic-bezier(0.2, 0.75, 0.2, 1),
+        box-shadow 180ms ease,
+        border-color 180ms ease;
+    }}
+
+    .card:hover,
+    .card:focus-within {{
+      transform: translateY(-4px) scale(1.02);
+      box-shadow: 0 20px 36px rgba(16, 21, 31, 0.24);
+      z-index: 3;
+    }}
+
+    .card.selected-keep:hover,
+    .card.selected-keep:focus-within {{
+      box-shadow: 0 20px 36px rgba(12, 122, 106, 0.28);
+    }}
+
+    .card.selected-retry:hover,
+    .card.selected-retry:focus-within {{
+      box-shadow: 0 20px 36px rgba(176, 106, 0, 0.28);
+    }}
+
+    .card.selected-reject:hover,
+    .card.selected-reject:focus-within {{
+      box-shadow: 0 20px 36px rgba(159, 34, 65, 0.3);
     }}
 
     .card img {{
@@ -111,6 +140,22 @@ def _build_html(keyword: str) -> str:
       object-fit: cover;
       background: #f1f3f8;
       display: block;
+      cursor: zoom-in;
+    }}
+
+    .card.selected-keep {{
+      border-color: rgba(12, 122, 106, 0.55);
+      box-shadow: 0 16px 34px rgba(12, 122, 106, 0.18);
+    }}
+
+    .card.selected-retry {{
+      border-color: rgba(176, 106, 0, 0.55);
+      box-shadow: 0 16px 34px rgba(176, 106, 0, 0.18);
+    }}
+
+    .card.selected-reject {{
+      border-color: rgba(159, 34, 65, 0.55);
+      box-shadow: 0 16px 34px rgba(159, 34, 65, 0.2);
     }}
 
     .meta {{
@@ -146,24 +191,66 @@ def _build_html(keyword: str) -> str:
       font-size: 0.85rem;
       font-family: "IBM Plex Mono", monospace;
       cursor: pointer;
-      transition: transform 120ms ease, background-color 120ms ease, border-color 120ms ease;
+      position: relative;
+      overflow: hidden;
+      transition:
+        transform 120ms ease,
+        background-color 120ms ease,
+        border-color 120ms ease,
+        box-shadow 120ms ease,
+        color 120ms ease;
+    }}
+
+    button.action::after {{
+      content: "";
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 5px;
+      opacity: 0;
+      transition: opacity 120ms ease;
     }}
 
     button.action:hover {{ transform: translateY(-1px); }}
 
     button.action.active.keep {{
       border-color: var(--accent);
-      background: rgba(12, 122, 106, 0.12);
+      background: #0c7a6a;
+      color: #ffffff;
+      font-weight: 700;
+      box-shadow: 0 10px 18px rgba(12, 122, 106, 0.2);
+    }}
+
+    button.action.active.keep::after {{
+      opacity: 1;
+      background: #064d43;
     }}
 
     button.action.active.retry {{
       border-color: var(--warn);
-      background: rgba(176, 106, 0, 0.14);
+      background: #b06a00;
+      color: #ffffff;
+      font-weight: 700;
+      box-shadow: 0 10px 18px rgba(176, 106, 0, 0.22);
+    }}
+
+    button.action.active.retry::after {{
+      opacity: 1;
+      background: #744200;
     }}
 
     button.action.active.reject {{
       border-color: var(--danger);
-      background: rgba(159, 34, 65, 0.12);
+      background: #9f2241;
+      color: #ffffff;
+      font-weight: 700;
+      box-shadow: 0 10px 18px rgba(159, 34, 65, 0.24);
+    }}
+
+    button.action.active.reject::after {{
+      opacity: 1;
+      background: #5e1124;
     }}
 
     .footer {{
@@ -203,21 +290,124 @@ def _build_html(keyword: str) -> str:
     #submit:disabled {{ opacity: 0.6; cursor: not-allowed; }}
 
     .toast {{
-      margin-top: 10px;
+      margin-top: 16px;
+      padding: 12px 14px;
+      border: 1px solid rgba(12, 122, 106, 0.22);
+      border-radius: 12px;
+      background: rgba(12, 122, 106, 0.1);
       font-size: 0.9rem;
       color: #244f42;
       display: none;
     }}
 
+    .toast.visible {{
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+    }}
+
+    .modal {{
+      position: fixed;
+      inset: 0;
+      display: none;
+      align-items: flex-start;
+      justify-content: flex-start;
+      padding: 12px;
+      background: rgba(16, 21, 31, 0.82);
+      z-index: 50;
+      overflow: hidden;
+    }}
+
+    .modal.open {{
+      display: flex;
+    }}
+
+    .modal-panel {{
+      position: fixed;
+      top: 24px;
+      left: 24px;
+      width: min(1100px, calc(100vw - 24px));
+      max-height: calc(100vh - 24px);
+      background: #fffdf8;
+      border-radius: 18px;
+      overflow: hidden;
+      box-shadow: 0 24px 80px rgba(0, 0, 0, 0.35);
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+    }}
+
+    .modal-bar {{
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line);
+      cursor: move;
+      user-select: none;
+    }}
+
+    .modal-title {{
+      margin: 0;
+      font-size: 1rem;
+      font-weight: 700;
+    }}
+
+    .modal-meta {{
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 0.82rem;
+      font-family: "IBM Plex Mono", monospace;
+    }}
+
+    .modal-close {{
+      border: 1px solid var(--line);
+      background: #ffffff;
+      color: var(--ink);
+      border-radius: 10px;
+      padding: 8px 12px;
+      font-family: "IBM Plex Mono", monospace;
+      cursor: pointer;
+    }}
+
+    .modal-close:focus-visible {{
+      outline: 2px solid #1455b3;
+      outline-offset: 2px;
+    }}
+
+    .modal-image-wrap {{
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      overflow: auto;
+      background: #eef1f5;
+    }}
+
+    .modal-image {{
+      display: block;
+      max-width: 92%;
+      max-height: 92%;
+      width: auto;
+      height: auto;
+      margin: 0 auto;
+      object-fit: contain;
+    }}
+
     @keyframes reveal {{
-      from {{ opacity: 0; transform: translateY(8px); }}
-      to {{ opacity: 1; transform: translateY(0); }}
+      from {{ opacity: 0; }}
+      to {{ opacity: 1; }}
     }}
 
     @media (max-width: 700px) {{
       .actions {{ grid-template-columns: 1fr; }}
       .footer {{ padding: 10px 12px; }}
       #submit {{ width: 100%; }}
+      .modal {{ padding: 12px; }}
+      .modal-panel {{
+        width: calc(100vw - 24px);
+        max-height: calc(100vh - 24px);
+      }}
     }}
   </style>
 </head>
@@ -229,8 +419,22 @@ def _build_html(keyword: str) -> str:
 
   <main>
     <div id=\"grid\" class=\"grid\"></div>
-    <div id=\"toast\" class=\"toast\">Submitted. You can close this tab.</div>
   </main>
+
+  <div id="image-modal" class="modal" aria-hidden="true">
+    <div class="modal-panel">
+      <div class="modal-bar">
+        <div>
+          <p id="modal-title" class="modal-title">Expanded design preview</p>
+          <div id="modal-meta" class="modal-meta"></div>
+        </div>
+        <button id="modal-close" class="modal-close" type="button">Close</button>
+      </div>
+      <div class="modal-image-wrap">
+        <img id="modal-image" class="modal-image" alt="Expanded design preview" />
+      </div>
+    </div>
+  </div>
 
   <div class=\"footer\">
     <div class=\"stats\" id=\"stats\">Loading...</div>
@@ -238,8 +442,49 @@ def _build_html(keyword: str) -> str:
   </div>
 
   <script>
+    const modal = document.getElementById("image-modal");
+    const modalPanel = modal.querySelector(".modal-panel");
+    const modalBar = modal.querySelector(".modal-bar");
+    const modalCloseBtn = document.getElementById("modal-close");
+    const modalImage = document.getElementById("modal-image");
+    const modalTitle = document.getElementById("modal-title");
+    const modalMeta = document.getElementById("modal-meta");
     const decisions = new Map();
     let designs = [];
+    let isSubmitting = false;
+    let dragOffsetX = 0;
+    let dragOffsetY = 0;
+    let isDragging = false;
+
+    function clamp(value, min, max) {{
+      if (max < min) return min;
+      return Math.min(Math.max(value, min), max);
+    }}
+
+    function clampModalPosition(left, top) {{
+      const xMargin = 12;
+      const yMargin = 0;
+      const panelWidth = modalPanel.offsetWidth;
+      const panelHeight = modalPanel.offsetHeight;
+      const maxLeft = window.innerWidth - panelWidth - xMargin;
+      const maxTop = window.innerHeight - panelHeight - yMargin;
+      return {{
+        left: clamp(left, xMargin, maxLeft),
+        top: clamp(top, yMargin, maxTop),
+      }};
+    }}
+
+    function placeModalPanel(left, top) {{
+      const bounded = clampModalPosition(left, top);
+      modalPanel.style.left = `${{bounded.left}}px`;
+      modalPanel.style.top = `${{bounded.top}}px`;
+    }}
+
+    function positionModalPanelAtTop() {{
+      const left = (window.innerWidth - modalPanel.offsetWidth) / 2;
+      const top = 0;
+      placeModalPanel(left, top);
+    }}
 
     function cardMarkup(item, idx) {{
       const delay = Math.min(idx * 40, 420);
@@ -249,11 +494,16 @@ def _build_html(keyword: str) -> str:
           style=\"animation-delay:${{delay}}ms\"
           data-index=\"${{item.index}}\"
         >
-          <img alt=\"${{item.title}}\" src=\"/image/${{item.index}}?v=${{Date.now()}}\" />
+          <img
+            alt=\"${{item.title}}\"
+            src=\"/image/${{item.index}}?v=${{Date.now()}}\"
+            data-role=\"expand-image\"
+          />
           <div class=\"meta\">
             <p class=\"title\">${{item.title}}</p>
             <p class=\"hint\">
               idea_index=${{item.idea_index}} | retry_count=${{item.retry_count}}
+              | click image to expand
             </p>
             <div class=\"actions\">
               <button class=\"action keep\" data-action=\"keep\">Keep</button>
@@ -281,14 +531,39 @@ def _build_html(keyword: str) -> str:
 
     function activateButton(card, action) {{
       card.querySelectorAll("button.action").forEach((btn) => btn.classList.remove("active"));
+      card.classList.remove("selected-keep", "selected-retry", "selected-reject");
       const btn = card.querySelector(`button.action.${{action}}`);
       if (btn) btn.classList.add("active");
+      card.classList.add(`selected-${{action}}`);
+    }}
+
+    function openModal(item) {{
+      modalImage.src = `/image/${{item.index}}?v=${{Date.now()}}`;
+      modalImage.alt = item.title;
+      modalTitle.textContent = item.title;
+      modalMeta.textContent =
+        `idea_index=${{item.idea_index}} | retry_count=${{item.retry_count}}`;
+      modal.classList.add("open");
+      modal.setAttribute("aria-hidden", "false");
+      requestAnimationFrame(positionModalPanelAtTop);
+    }}
+
+    function closeModal() {{
+      modal.classList.remove("open");
+      modal.setAttribute("aria-hidden", "true");
+      modalImage.removeAttribute("src");
+      isDragging = false;
     }}
 
     function wireCard(card, item) {{
       const defaultAction = "keep";
       decisions.set(item.index, defaultAction);
       activateButton(card, defaultAction);
+
+      const image = card.querySelector('[data-role="expand-image"]');
+      if (image) {{
+        image.addEventListener("click", () => openModal(item));
+      }}
 
       card.querySelectorAll("button.action").forEach((btn) => {{
         btn.addEventListener("click", () => {{
@@ -322,6 +597,8 @@ def _build_html(keyword: str) -> str:
       }};
       const btn = document.getElementById("submit");
       btn.disabled = true;
+      btn.textContent = "Submitting";
+      isSubmitting = true;
       try {{
         const response = await fetch("/api/submit", {{
           method: "POST",
@@ -329,13 +606,59 @@ def _build_html(keyword: str) -> str:
           body: JSON.stringify(payload),
         }});
         if (!response.ok) throw new Error("Submit failed");
-        document.getElementById("toast").style.display = "block";
-      }} finally {{
+        await response.json();
+        window.setTimeout(() => {{
+          window.open("", "_self");
+          window.close();
+        }}, 120);
+      }} catch (_error) {{
+        isSubmitting = false;
         btn.disabled = false;
+        btn.textContent = "Submit Review Decisions";
+        throw _error;
       }}
     }}
 
     document.getElementById("submit").addEventListener("click", submitDecisions);
+    modalCloseBtn.addEventListener("click", closeModal);
+
+    modalBar.addEventListener("mousedown", (event) => {{
+      if (event.target === modalCloseBtn) return;
+      if (event.button !== 0) return;
+      event.preventDefault();
+      const rect = modalPanel.getBoundingClientRect();
+      dragOffsetX = event.clientX - rect.left;
+      dragOffsetY = event.clientY - rect.top;
+      isDragging = true;
+    }});
+
+    document.addEventListener("mousemove", (event) => {{
+      if (!isDragging || !modal.classList.contains("open")) return;
+      placeModalPanel(event.clientX - dragOffsetX, event.clientY - dragOffsetY);
+    }});
+
+    document.addEventListener("mouseup", () => {{
+      isDragging = false;
+    }});
+
+    window.addEventListener("resize", () => {{
+      if (!modal.classList.contains("open")) return;
+      const currentLeft = Number.parseFloat(modalPanel.style.left || "0");
+      const currentTop = Number.parseFloat(modalPanel.style.top || "0");
+      placeModalPanel(currentLeft, currentTop);
+    }});
+
+    window.addEventListener("beforeunload", () => {{
+      if (isSubmitting) return;
+      navigator.sendBeacon("/api/closed");
+    }});
+
+    modal.addEventListener("click", (event) => {{
+      if (event.target === modal) closeModal();
+    }});
+    document.addEventListener("keydown", (event) => {{
+      if (event.key === "Escape" && modal.classList.contains("open")) closeModal();
+    }});
 
     loadDesigns().catch((err) => {{
       document.getElementById("stats").textContent = err.message;
@@ -356,7 +679,9 @@ def review_generated_designs(
         designs: Review payload with indexes, titles, and image paths.
 
     Returns:
-        Mapping from review index to selected action.
+      Mapping from review index to selected action.
+      If the browser window is closed before submit, defaults to "keep"
+      for each design.
 
     Raises:
         RuntimeError: If the review submission payload is invalid.
@@ -369,8 +694,9 @@ def review_generated_designs(
     design_map: dict[int, dict[str, Any]] = {
         int(item["index"]): item for item in designs
     }
-    state: dict[str, Any] = {"submitted": None}
+    state: dict[str, Any] = {"submitted": None, "closed_without_submit": False}
     submitted_event = threading.Event()
+    closed_event = threading.Event()
 
     class DesignReviewHandler(BaseHTTPRequestHandler):
         """HTTP handler for the design review UI and JSON endpoints."""
@@ -461,6 +787,19 @@ def review_generated_designs(
             self.send_error(HTTPStatus.NOT_FOUND)
 
         def do_POST(self) -> None:  # noqa: N802
+            if self.path == "/api/closed":
+                state["closed_without_submit"] = True
+                closed_event.set()
+
+                def _shutdown_server_on_close() -> None:
+                    time.sleep(0.15)
+                    self.server.shutdown()
+
+                threading.Thread(target=_shutdown_server_on_close, daemon=True).start()
+                self.send_response(HTTPStatus.NO_CONTENT)
+                self.end_headers()
+                return
+
             if self.path != "/api/submit":
                 self.send_error(HTTPStatus.NOT_FOUND)
                 return
@@ -499,8 +838,19 @@ def review_generated_designs(
 
             state["submitted"] = output
             submitted_event.set()
-            self._write_json(HTTPStatus.OK, {"ok": True})
-            threading.Thread(target=self.server.shutdown, daemon=True).start()
+            self._write_json(
+                HTTPStatus.OK,
+                {
+                    "ok": True,
+                    "message": "Review decisions submitted. Closing this tab...",
+                },
+            )
+
+            def _shutdown_server() -> None:
+                time.sleep(1.2)
+                self.server.shutdown()
+
+            threading.Thread(target=_shutdown_server, daemon=True).start()
 
         def log_message(self, format: str, *args: Any) -> None:
             return
@@ -514,10 +864,20 @@ def review_generated_designs(
 
     server_thread = threading.Thread(target=server.serve_forever, daemon=True)
     server_thread.start()
-    submitted_event.wait()
+    while True:
+        if submitted_event.wait(timeout=0.2):
+            break
+        if closed_event.is_set():
+            break
     server.server_close()
 
     submitted = state.get("submitted")
+    if state.get("closed_without_submit") and not isinstance(submitted, dict):
+        log_action(
+            f"Design review window closed before submit for keyword '{keyword}'; "
+            "defaulting all decisions to keep"
+        )
+        return {int(key): "keep" for key in design_map.keys()}
     if not isinstance(submitted, dict):
         raise RuntimeError("Design review did not return valid decisions.")
     return {int(key): str(value) for key, value in submitted.items()}

@@ -5,6 +5,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 from logger_config import log_action
 
 
@@ -90,12 +91,53 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def _confirm_runtime_settings(settings: dict[str, Any]) -> bool:
+    """Print selected runtime settings and require explicit user confirmation.
+
+    Args:
+        settings: Mapping of setting names to values to display.
+
+    Returns:
+        True when user confirms with y/yes, else False.
+    """
+    log_action("Displaying runtime settings and waiting for confirmation")
+    header = "Mass Production Runtime Settings"
+    separator = "=" * 52
+    print(f"\n{separator}")
+    print(header)
+    print(separator)
+    for key, value in settings.items():
+        print(f"{key:<32} : {value}")
+    print(separator)
+
+    user_input = input("Confirm these settings? (yes to continue): ").strip().lower()
+    is_confirmed = user_input in {"y", "yes"}
+    if is_confirmed:
+        log_action("Runtime settings confirmed by user")
+        return True
+
+    log_action("Runtime settings rejected by user; aborting run")
+    print("Aborted by user.")
+    return False
+
+
 def main() -> None:
     """Run the pipeline using command-line arguments."""
     _configure_module_path()
+    import constants
     from pipeline import run_pipeline
 
     args = parse_args()
+    settings_to_confirm: dict[str, Any] = {
+        "REVIEW_DESIGNS": constants.REVIEW_DESIGNS,
+        "IDEAS_PER_KEYWORD": constants.IDEAS_PER_KEYWORD,
+        "FILTERED_IDEAS_PER_KEYWORD": constants.FILTERED_IDEAS_PER_KEYWORD,
+        "BACKGROUND_REMOVAL_MODE": constants.BACKGROUND_REMOVAL_MODE,
+        "dry run": args.dry_run,
+    }
+    if not _confirm_runtime_settings(settings_to_confirm):
+        return
+
     run_pipeline(
         dry_run=args.dry_run,
     )

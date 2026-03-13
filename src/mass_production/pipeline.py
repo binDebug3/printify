@@ -2,6 +2,8 @@
 
 import json
 import os
+import re
+
 # import random
 from pathlib import Path
 from typing import Any, List, Dict
@@ -88,6 +90,9 @@ def _load_prompts() -> Dict[str, str]:
         "description": read_text(constants.DESCRIPTION_PROMPT_PATH),
         "keywords": read_text(constants.KEYWORDS_PROMPT_PATH),
         "default_description": read_text(constants.DEFAULT_DESCRIPTION_PATH),
+        "filter_design_descriptions": read_text(
+            constants.FILTER_DESIGN_DESCRIPTIONS_PATH
+        ),
     }
 
 
@@ -101,7 +106,9 @@ def _load_color_to_ids_map(path: Path) -> Dict[str, List[int]]:
         Mapping from color names to ordered variant IDs.
     """
     payload: Dict = read_json(path)
-    variants: List[str] = payload.get("variants", []) if isinstance(payload, dict) else []
+    variants: List[str] = (
+        payload.get("variants", []) if isinstance(payload, dict) else []
+    )
     color_to_ids: dict[str, list[int]] = {}
     for entry in variants:
         if not isinstance(entry, dict):
@@ -131,8 +138,12 @@ def _normalize_idea_payload(raw: dict[str, Any], keyword: str) -> dict[str, Any]
         "typography": str(raw.get("typography", "")).strip(),
         "composition": str(raw.get("composition", "")).strip(),
         "background": str(raw.get("background", "")).strip(),
-        "design_colors": [str(c).strip() for c in raw.get("design_colors", []) if str(c).strip()],
-        "shirt_colors": [str(c).strip() for c in raw.get("shirt_colors", []) if str(c).strip()],
+        "design_colors": [
+            str(c).strip() for c in raw.get("design_colors", []) if str(c).strip()
+        ],
+        "shirt_colors": [
+            str(c).strip() for c in raw.get("shirt_colors", []) if str(c).strip()
+        ],
     }
 
 
@@ -179,7 +190,7 @@ def _generate_ideas_for_keyword(
     Returns:
         List of raw idea dictionaries.
     """
-    
+
     prompt: str = (
         f"{design_prompt}\n\n"
         f"Keyword: {keyword}\n"
@@ -191,6 +202,142 @@ def _generate_ideas_for_keyword(
     return ideas[:ideas_per_keyword]
 
 
+def _parse_filter_response_payload(response_text: str) -> dict[str, Any]:
+    """Parse JSON object payload from filter model output.
+
+    Args:
+        response_text: Raw Gemini output text.
+
+    Returns:
+        Parsed dictionary payload.
+    """
+    stripped: str = response_text.strip()
+    try:
+        parsed_direct: Any = json.loads(stripped)
+        if isinstance(parsed_direct, dict):
+            return parsed_direct
+    except json.JSONDecodeError:
+        pass
+
+    match = re.search(r"\{.*\}", stripped, re.DOTALL)
+    if not match:
+        return {}
+    try:
+        parsed_block: Any = json.loads(match.group(0))
+        if isinstance(parsed_block, dict):
+            return parsed_block
+    except json.JSONDecodeError:
+        return {}
+    return {}
+
+
+def _filter_ideas_for_keyword(
+    gemini: GeminiClient,
+    filter_prompt: str,
+    keyword: str,
+    raw_ideas: list[dict[str, Any]],
+    filtered_ideas_per_keyword: int,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Filter and rank generated ideas before expensive asset generation.
+
+    Args:
+        gemini: Gemini text client.
+        filter_prompt: Prompt template for design filtering.
+        keyword: Source keyword for generated ideas.
+        raw_ideas: Raw generated ideas.
+        filtered_ideas_per_keyword: Max number of selected ideas.
+
+    Returns:
+        Tuple of (filtered ideas list, filter metadata payload).
+    """
+    log_action(f"Filtering {len(raw_ideas)} generated ideas for keyword '{keyword}'")
+    if not raw_ideas:
+        return [], {"selected_designs": []}
+
+    ideas_json: str = json.dumps(raw_ideas, indent=2)
+    prompt: str = (
+        f"Keyword: {keyword}\n"
+        f"# Input ideas JSON:\n{ideas_json}\n\n"
+        f"{filter_prompt}\n"
+        f"Filter this list of {constants.IDEAS_PER_KEYWORD} ideas down to the best "
+        f"{filtered_ideas_per_keyword} ideas for product creation. "
+    )
+    response_text: str = gemini.generate_text(prompt)
+    parsed_payload: dict[str, Any] = _parse_filter_response_payload(response_text)
+    raw_selected_designs: Any = parsed_payload.get("selected_designs", [])
+
+    normalized_selected_designs: list[dict[str, Any]] = []
+    seen_indexes: set[int] = set()
+    if isinstance(raw_selected_designs, list):
+        for item in raw_selected_designs:
+            if not isinstance(item, dict):
+                continue
+            index_value: Any = item.get("index")
+            if not isinstance(index_value, int):
+                continue
+            if index_value < 0 or index_value >= len(raw_ideas):
+                continue
+            if index_value in seen_indexes:
+                continue
+            seen_indexes.add(index_value)
+
+            pass_value_raw: Any = item.get("pass", False)
+            rank_value_raw: Any = item.get("rank", len(raw_ideas) + index_value + 1)
+            reason_value_raw: Any = item.get("reason", "")
+
+            pass_value: bool = bool(pass_value_raw)
+            rank_value: int = (
+                rank_value_raw
+                if isinstance(rank_value_raw, int)
+                else len(raw_ideas) + index_value + 1
+            )
+            reason_value: str = str(reason_value_raw).strip()
+
+            normalized_selected_designs.append(
+                {
+                    "index": index_value,
+                    "pass": pass_value,
+                    "rank": rank_value,
+                    "reason": reason_value,
+                }
+            )
+
+    for missing_index in range(len(raw_ideas)):
+        if missing_index in seen_indexes:
+            continue
+        normalized_selected_designs.append(
+            {
+                "index": missing_index,
+                "pass": False,
+                "rank": len(raw_ideas) + missing_index + 1,
+                "reason": "No filter response generated for this idea.",
+            }
+        )
+
+    normalized_selected_designs.sort(
+        key=lambda item: (int(item["rank"]), int(item["index"]))
+    )
+
+    passing_indexes: list[int] = [
+        int(item["index"]) for item in normalized_selected_designs if bool(item["pass"])
+    ]
+    selected_indexes: list[int] = passing_indexes[:filtered_ideas_per_keyword]
+    if not selected_indexes:
+        selected_indexes = [
+            int(item["index"])
+            for item in normalized_selected_designs[:filtered_ideas_per_keyword]
+        ]
+
+    selected_ideas: list[dict[str, Any]] = [
+        raw_ideas[index] for index in selected_indexes
+    ]
+    filter_metadata: dict[str, Any] = {"selected_designs": normalized_selected_designs}
+    log_action(
+        f"Filtered ideas for '{keyword}': selected {len(selected_ideas)} of {len(raw_ideas)}"
+    )
+    return selected_ideas, filter_metadata
+
+
 def _save_idea_json(idea: Idea) -> None:
     """Save per-idea JSON output.
 
@@ -198,7 +345,9 @@ def _save_idea_json(idea: Idea) -> None:
         idea: Idea payload object.
     """
     write_json(idea.folder_path / "ideas.json", [idea.payload])
-    log_action(f"Saved idea JSON for '{idea.title}' to '{idea.folder_path / 'ideas.json'}'")
+    log_action(
+        f"Saved idea JSON for '{idea.title}' to '{idea.folder_path / 'ideas.json'}'"
+    )
 
 
 def _generate_design_assets(
@@ -226,7 +375,7 @@ def _generate_design_assets(
     design_bytes = gemini.generate_image(design_prompt)
     design_path = idea.folder_path / "design.png"
     write_bytes(design_path, design_bytes)
-    
+
     # remove background
     log_action(f"Removing background from design for '{idea.title}'")
     transparent_bytes: bytes = remove_bg_client.remove_background(design_bytes)
@@ -234,16 +383,15 @@ def _generate_design_assets(
     write_bytes(transparent_path, transparent_bytes)
 
     # mockup background
-    background_prompt: str = (
-        f"{prompts['background']}\n\n"
-        f"Design JSON:\n{idea_json}"
-    )
+    background_prompt: str = f"{prompts['background']}\n\nDesign JSON:\n{idea_json}"
     log_action(f"Generating background text for '{idea.title}'")
     background_text: str = gemini.generate_text(background_prompt).strip()
     write_text(idea.folder_path / "background.txt", background_text)
 
     # mock up
-    shirt_color_mockup: str = idea.payload.get("shirt_colors", [constants.DEFAULT_SHIRT_COLOR])[0]
+    shirt_color_mockup: str = idea.payload.get(
+        "shirt_colors", [constants.DEFAULT_SHIRT_COLOR]
+    )[0]
     model_gender: str = "male"
     mockup_prompt: str = (
         f"Make the t shirt color {shirt_color_mockup}"
@@ -252,14 +400,18 @@ def _generate_design_assets(
         f"{prompts['mockup']}\n\n"
     )
     log_action(f"Generating mockup image for '{idea.title}'")
-    mockup_bytes: bytes = gemini.generate_image(mockup_prompt, image_bytes=transparent_bytes)
+    mockup_bytes: bytes = gemini.generate_image(
+        mockup_prompt, image_bytes=transparent_bytes
+    )
     slugified_color: str = slugify_title(shirt_color_mockup)
     mockup_path: Path = idea.folder_path / f"mockup_({slugified_color}).png"
     write_bytes(mockup_path, mockup_bytes)
 
     # cropped mockup
     log_action(f"Cropping mockup image for '{idea.title}'")
-    mockup_cropped_path: Path = idea.folder_path / f"mockup_({slugified_color})_cropped.png"
+    mockup_cropped_path: Path = (
+        idea.folder_path / f"mockup_({slugified_color})_cropped.png"
+    )
     crop_center_percent(mockup_path, mockup_cropped_path, constants.CROP_CENTER_PERCENT)
 
     return design_path, transparent_path, mockup_path, mockup_cropped_path
@@ -299,7 +451,9 @@ def _generate_listing_fields(
             part.strip() for part in generated_description_raw.split("$$$", maxsplit=1)
         ]
 
-    full_description: str = f"{generated_description}\n\n{prompts['default_description']}"
+    full_description: str = (
+        f"{generated_description}\n\n{prompts['default_description']}"
+    )
 
     # keywords
     log_action(f"Generating keywords for '{idea.title}'")
@@ -329,7 +483,9 @@ def _select_colors(idea: Idea, color_to_ids: Dict[str, List[int]]) -> List[str]:
         List of color names to use for product variants.
     """
     log_action(f"Selecting colors for '{idea.title}' from idea payload and variant map")
-    colors: List[str] = [c for c in idea.payload.get("shirt_colors", []) if c in color_to_ids]
+    colors: List[str] = [
+        c for c in idea.payload.get("shirt_colors", []) if c in color_to_ids
+    ]
     if colors:
         return colors
     return list(color_to_ids.keys())
@@ -348,9 +504,12 @@ def run_pipeline(
         ideas_per_keyword: Number of ideas to generate per keyword.
     """
     prompts: Dict[str, str] = _load_prompts()
-    keywords: List[str] = read_keywords_from_ideas_csv(constants.IDEAS_CSV_PATH, 
-                                                       limit=keyword_limit)
-    color_to_ids: Dict[str, List[int]] = _load_color_to_ids_map(constants.VARIANT_MAP_PATH)
+    keywords: List[str] = read_keywords_from_ideas_csv(
+        constants.IDEAS_CSV_PATH, limit=keyword_limit
+    )
+    color_to_ids: Dict[str, List[int]] = _load_color_to_ids_map(
+        constants.VARIANT_MAP_PATH
+    )
 
     if not keywords:
         message: str = "No ideas marked used=false found in ideas.csv"
@@ -359,9 +518,15 @@ def run_pipeline(
         return
 
     gemini_key: str = _require_setting("GEMINI_API_KEY", constants.GEMINI_API_KEY_PATH)
-    removebg_key: str = _require_setting("REMOVEBG_API_KEY", constants.REMOVEBG_API_KEY_PATH)
-    printify_token: str = _require_setting("PRINTIFY_API_TOKEN", constants.PRINTIFY_API_TOKEN_PATH)
-    printify_shop_id: str = _require_setting("PRINTIFY_SHOP_ID", constants.PRINTIFY_SHOP_ID_PATH)
+    removebg_key: str = _require_setting(
+        "REMOVEBG_API_KEY", constants.REMOVEBG_API_KEY_PATH
+    )
+    printify_token: str = _require_setting(
+        "PRINTIFY_API_TOKEN", constants.PRINTIFY_API_TOKEN_PATH
+    )
+    printify_shop_id: str = _require_setting(
+        "PRINTIFY_SHOP_ID", constants.PRINTIFY_SHOP_ID_PATH
+    )
 
     gemini: GeminiClient = GeminiClient(
         api_key=gemini_key,
@@ -399,11 +564,22 @@ def run_pipeline(
                 keyword=keyword,
                 ideas_per_keyword=ideas_per_keyword,
             )
+            filtered_ideas, filter_metadata = _filter_ideas_for_keyword(
+                gemini=gemini,
+                filter_prompt=prompts["filter_design_descriptions"],
+                keyword=keyword,
+                raw_ideas=raw_ideas,
+                filtered_ideas_per_keyword=constants.FILTERED_IDEAS_PER_KEYWORD,
+            )
+            write_json(
+                constants.IMAGES_DIR / f"{slugify_title(keyword)}_filtering.json",
+                filter_metadata,
+            )
         except Exception as exc:  # noqa: BLE001
             log_action(f"Failed to generate ideas for '{keyword}': {exc}")
             continue
 
-        for raw_idea in raw_ideas:
+        for raw_idea in filtered_ideas:
             try:
                 idea: Idea = _build_idea_object(raw_idea=raw_idea, keyword=keyword)
                 idea.folder_path.mkdir(parents=True, exist_ok=True)
@@ -427,8 +603,12 @@ def run_pipeline(
                     base_usd=constants.BASE_PRICE_USD,
                     stdev_usd=constants.PRICE_STDEV_USD,
                 )
-                uploaded_image: Dict[str, Any] = printify_client.upload_image(transparent_path)
-                uploaded_mockup: Dict[str, Any] = printify_client.upload_image(mockup_cropped_path)
+                uploaded_image: Dict[str, Any] = printify_client.upload_image(
+                    transparent_path
+                )
+                uploaded_mockup: Dict[str, Any] = printify_client.upload_image(
+                    mockup_cropped_path
+                )
                 if uploaded_image or uploaded_mockup:
                     write_json(
                         idea.folder_path / "printify_upload.json",
@@ -445,7 +625,9 @@ def run_pipeline(
                     selected_colors=selected_colors,
                     color_to_ids=color_to_ids,
                     design_transparent_path=transparent_path,
-                    uploaded_image_id=uploaded_image.get("id") if uploaded_image else None,
+                    uploaded_image_id=uploaded_image.get("id")
+                    if uploaded_image
+                    else None,
                     base_price_usd=sampled_price,
                 )
                 write_json(idea.folder_path / "printify_payload.json", payload)

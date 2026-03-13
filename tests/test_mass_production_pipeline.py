@@ -85,6 +85,7 @@ class TestRunPipeline:
                     "description": "description prompt",
                     "keywords": "keywords prompt",
                     "default_description": "default description",
+                    "filter_design_descriptions": "filter prompt",
                 },
             ),
             patch.object(
@@ -109,6 +110,18 @@ class TestRunPipeline:
                 pipeline_module,
                 "_generate_ideas_for_keyword",
                 return_value=[{"title": "Alpha Shirt"}],
+            ),
+            patch.object(
+                pipeline_module,
+                "_filter_ideas_for_keyword",
+                return_value=(
+                    [{"title": "Alpha Shirt"}],
+                    {
+                        "selected_designs": [
+                            {"index": 0, "pass": True, "rank": 1, "reason": "fit"}
+                        ]
+                    },
+                ),
             ),
             patch.object(pipeline_module, "_build_idea_object", return_value=idea),
             patch.object(
@@ -156,6 +169,7 @@ class TestRunPipeline:
                     "description": "description prompt",
                     "keywords": "keywords prompt",
                     "default_description": "default description",
+                    "filter_design_descriptions": "filter prompt",
                 },
             ),
             patch.object(
@@ -180,6 +194,18 @@ class TestRunPipeline:
                 return_value=[{"title": "Alpha Shirt"}],
             ),
             patch.object(
+                pipeline_module,
+                "_filter_ideas_for_keyword",
+                return_value=(
+                    [{"title": "Alpha Shirt"}],
+                    {
+                        "selected_designs": [
+                            {"index": 0, "pass": True, "rank": 1, "reason": "fit"}
+                        ]
+                    },
+                ),
+            ),
+            patch.object(
                 pipeline_module, "_build_idea_object", side_effect=RuntimeError("boom")
             ),
             patch.object(pipeline_module, "mark_idea_as_published") as mock_mark,
@@ -189,3 +215,32 @@ class TestRunPipeline:
             )
 
         mock_mark.assert_not_called()
+
+    def test_filter_ideas_for_keyword_limits_to_filtered_count(self):
+        """Returns top passing designs up to FILTERED_IDEAS_PER_KEYWORD."""
+        raw_ideas = [{"title": f"Idea {idx}"} for idx in range(4)]
+        gemini = MagicMock()
+        gemini.generate_text.return_value = """
+        {
+          "selected_designs": [
+            {"index": 0, "pass": true, "rank": 3, "reason": "ok"},
+            {"index": 1, "pass": false, "rank": 4, "reason": "weak"},
+            {"index": 2, "pass": true, "rank": 1, "reason": "best"},
+            {"index": 3, "pass": true, "rank": 2, "reason": "good"}
+          ]
+        }
+        """
+
+        filtered_ideas, metadata = pipeline_module._filter_ideas_for_keyword(
+            gemini=gemini,
+            filter_prompt="filter prompt",
+            keyword="alpha",
+            raw_ideas=raw_ideas,
+            filtered_ideas_per_keyword=2,
+        )
+
+        assert len(filtered_ideas) == 2
+        assert filtered_ideas[0]["title"] == "Idea 2"
+        assert filtered_ideas[1]["title"] == "Idea 3"
+        assert "selected_designs" in metadata
+        assert len(metadata["selected_designs"]) == 4

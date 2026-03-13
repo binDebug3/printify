@@ -26,6 +26,7 @@ TITLE_PROMPT_PATH: Path = PROMPTS_DIR / "title_prompt.txt"
 DESCRIPTION_PROMPT_PATH: Path = PROMPTS_DIR / "description_prompt.txt"
 KEYWORDS_PROMPT_PATH: Path = PROMPTS_DIR / "keywords_prompt.txt"
 DEFAULT_DESCRIPTION_PATH: Path = PROMPTS_DIR / "default_description.txt"
+FILTER_DESIGN_DESCRIPTIONS_PATH: Path = PROMPTS_DIR / "filter_design_descriptions.txt"
 
 # Models and providers
 TEXT_MODEL: str = "gemini-3-flash-preview"
@@ -35,8 +36,10 @@ PRINTIFY_API_BASE_URL: str = "https://api.printify.com/v1"
 PRINTIFY_USER_AGENT: str = "printify-automation"
 
 # Runtime behavior
+IDEAS_PER_KEYWORD: int = 4
+FILTERED_IDEAS_PER_KEYWORD: int = 2
+FILTERED_DESIGNS_PER_KEYWORD: int = 5
 DEFAULT_DRY_RUN: bool = True
-IDEAS_PER_KEYWORD: int = 2
 MAX_KEYWORDS_PER_RUN: int = 25
 MAX_GEMINI_RETRIES: int = 3
 MAX_REMOVEBG_RETRIES: int = 2

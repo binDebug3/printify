@@ -35,6 +35,7 @@ The repository uses CSV- and file-based configuration under the workspace root, 
 - Gemini-powered idea generation, listing copy generation, and image generation.
 - remove.bg integration for transparent artwork generation.
 - Printify dry-run and real-run support for draft product creation.
+- LLM-based design filtering from generated ideas down to `FILTERED_IDEAS_PER_KEYWORD` before image generation.
 - Per-design artifact output under `data/images/<folder_slug>/`, including prompts, listing text, payloads, and API responses.
 - Post-dry-run command for creating a single Printify draft from an existing generated folder.
 - ideas.csv publication tracking: after successful mass-production publishes, eligible `used=false` rows are updated to `used=true`, `shirt_count=IDEAS_PER_KEYWORD`, and today's `publication_date`.
@@ -188,11 +189,12 @@ What the mass production pipeline does:
 
 1. Reads unused keywords from `data/ideas.csv`.
 2. Generates ideas from the prompt templates.
-3. Produces artwork, transparent artwork, and mockups.
-4. Generates listing title, description, personas, and keyword tags.
-5. Builds Printify payloads and optionally creates draft products.
-6. Saves all generated artifacts under `data/images/<folder_slug>/`.
-7. Updates matching `ideas.csv` rows after successful publishing.
+3. Filters generated ideas using `data/prompts/filter_design_descriptions.txt`, then stores filter metadata in `data/images/<keyword_slug>_filtering.json`.
+4. Produces artwork, transparent artwork, and mockups.
+5. Generates listing title, description, personas, and keyword tags.
+6. Builds Printify payloads and optionally creates draft products.
+7. Saves all generated artifacts under `data/images/<folder_slug>/`.
+8. Updates matching `ideas.csv` rows after successful publishing.
 
 If there are no rows with `used=false`, the pipeline logs and prints a message instead of running.
 

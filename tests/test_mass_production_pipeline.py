@@ -25,6 +25,11 @@ class TestRunPipeline:
             patch.object(
                 pipeline_module, "read_keywords_from_ideas_csv", return_value=[]
             ),
+            patch.object(
+                pipeline_module,
+                "_load_color_to_ids_map",
+                return_value={"pepper": [101]},
+            ),
             patch.object(pipeline_module, "log_action") as mock_log,
             patch("builtins.print") as mock_print,
         ):

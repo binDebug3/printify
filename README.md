@@ -142,6 +142,22 @@ cd printify
 python src/publish.py
 ```
 
+Create one Printify draft product from an existing dry-run output folder:
+
+```bash
+cd printify
+./post_dry_run.sh <folder_slug>
+```
+
+Example:
+
+```bash
+./post_dry_run.sh my_design_title_1
+```
+
+This command expects the folder under `../data/images/` to contain dry-run artifacts such as
+`design_transparent.png`, `ideas.json`, `title.txt`, `description.txt`, and `keywords.txt`.
+
 What happens during a run:
 
 1. Load token and schedule file

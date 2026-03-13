@@ -19,14 +19,45 @@ Example:
 """
 
 import os
+import shutil
+import subprocess
 import time
 from datetime import datetime
+from pathlib import Path
 from typing import Optional, Tuple
 
 import pandas as pd
 from logger_config import log_action
 from notification import send_email
 from tools import load_api_token, publish_product
+
+
+def _open_actions_log_in_vscode() -> None:
+    """Open meta/actions.log in VS Code and try to focus latest entries.
+
+    This is best-effort behavior and does nothing if the `code` CLI is unavailable.
+    """
+    code_cli = shutil.which("code")
+    if code_cli is None:
+        log_action("VS Code CLI not found; skipping actions.log auto-open")
+        return
+
+    actions_log = Path(__file__).resolve().parents[2] / "meta" / "actions.log"
+    try:
+        subprocess.run(
+            [code_cli, "--reuse-window", "--goto", f"{actions_log}:999999"],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        subprocess.run(
+            [code_cli, "--reuse-window", "--command", "workbench.action.closeSidebar"],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except Exception as exc:  # noqa: BLE001
+        log_action(f"Failed to trigger VS Code actions.log focus: {exc}")
 
 
 def load_schedule(schedule_file: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
@@ -147,6 +178,7 @@ def main(token_file: Optional[str] = None, schedule_file: Optional[str] = None) 
 
 if __name__ == "__main__":
     log_action("'PUBLISH' script started ----------------------------------------\n")
+    _open_actions_log_in_vscode()
     print("CHECKING FOR PRODUCTS TO PUBLISH")
     main()
     time.sleep(2)  # Sleep to ensure all log messages are written before the script exits

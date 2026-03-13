@@ -1,15 +1,17 @@
-# Printify to Etsy Auto Publisher
+# Printify Automation
 
 [![Build Status](https://github.com/binDebug3/printify/actions/workflows/python-tests.yml/badge.svg)](https://github.com/binDebug3/printify/actions/workflows/python-tests.yml)
-
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](./LICENSE)
 [![Printify API](https://img.shields.io/badge/Printify-API-1DBA5A)](https://developers.printify.com/)
 [![Gmail API](https://img.shields.io/badge/Google-Gmail%20API-EA4335?logo=gmail&logoColor=white)](https://developers.google.com/gmail/api)
 
-Automate scheduled product publishing from [Printify](https://printify.com/) to Etsy, with action logging and optional email notifications.
+Automation for two related workflows:
 
-This project reads a daily publishing schedule, publishes eligible products through the Printify API, updates publish status in CSV, and sends a success email when an item goes live.
+1. Scheduled publication of existing Printify drafts to Etsy.
+2. AI-assisted mass production of new shirt listings, including dry runs, Printify draft creation, and artifact generation.
+
+The repository uses CSV- and file-based configuration under the workspace root, writes action logs to `meta/actions.log`, and stores generated listing assets under `data/images`.
 
 ## Table Of Contents
 
@@ -19,182 +21,201 @@ This project reads a daily publishing schedule, publishes eligible products thro
 - [Configuration](#configuration)
 - [Installation](#installation)
 - [Usage](#usage)
-- [Notifications](#notifications)
-- [Contributing](#contributing)
+- [Testing](#testing)
 - [License](#license)
 
 ## Features
 
-- Scheduled publish flow using `data/schedule.csv`
-- Printify publishing via REST API
-- Product status write-back to schedule file (`publish_status`)
-- File-based action logging to `meta/actions.log`
-- Gmail notification on successful publish
+- Scheduled Etsy publishing from `data/schedule.csv` through the Printify publish API.
+- CSV write-back of `publish_status` after successful scheduled publishes.
+- Optional Gmail notifications when scheduled products go live.
+- Product utility commands for listing shop products and generating color-to-variant maps.
+- Mass production pipeline driven by `data/ideas.csv` and prompt templates in `data/prompts`.
+- Gemini-powered idea generation, listing copy generation, and image generation.
+- remove.bg integration for transparent artwork generation.
+- Printify dry-run and real-run support for draft product creation.
+- Per-design artifact output under `data/images/<folder_slug>/`, including prompts, listing text, payloads, and API responses.
+- Post-dry-run command for creating a single Printify draft from an existing generated folder.
+- ideas.csv publication tracking: after successful mass-production publishes, eligible `used=false` rows are updated to `used=true`, `shirt_count=IDEAS_PER_KEYWORD`, and today's `publication_date`.
+- Console and log messaging when no unused ideas are available for mass production.
 
 ## Project Structure
 
-This repository expects the following workspace layout:
-
 ```text
 data/
-    schedule.csv
+    images/
+    prompts/
 meta/
-    api_token.txt
-    shop_id.txt
-    email_address.txt
-    credentials.json
-    mail_token.pickle
-    actions.log
 printify/
     src/
+        logger_config.py
+        mass_production.py
+        notification.py
         publish.py
         tools.py
-        notification.py
-        logger_config.py
-    README.md
-    LICENSE
-    requirements.yml
-    pyproject.toml
-    gits.sh
-    run_tests.sh
+        mass_production/
+            constants.py
+            gemini_client.py
+            io_utils.py
+            models.py
+            pipeline.py
+            post_dry_run.py
+            printify_client.py
+            remove_bg.py
+    tests/
+        __init__.py
+        conftest.py
+        test_mass_production_io_utils.py
+        test_notification.py
+        test_publish.py
+        test_tools.py
 ```
 
 ## Requirements
 
-- Python `3.10+` (recommended)
-- A Printify account with API access
-- A connected Etsy sales channel in Printify
-- Gmail API credentials (for notifications)
+- Python 3.10 or newer.
+- A Printify account, shop ID, and API token.
+- A connected Etsy sales channel in Printify for publishing.
+- Gemini API access for mass production.
+- remove.bg API access for transparent artwork generation.
+- Gmail API credentials if email notifications are enabled.
 
-Python packages used by this project:
+Primary Python dependencies used in this project:
 
-- `requests`
-- `pandas`
-- `google-auth`
-- `google-auth-oauthlib`
-- `google-api-python-client`
-
-You can install them withthe requirements.yml file or directly via pip:
-
-```bash
-pip install requests pandas google-auth google-auth-oauthlib google-api-python-client
-```
+- pandas
+- requests
+- pillow
+- google-genai
+- google-auth
+- google-auth-oauthlib
+- google-api-python-client
 
 ## Configuration
 
-All runtime files are loaded from paths relative to `printify/`.
+The project expects the workspace layout shown above, with shared data and secrets outside the `printify/` folder.
 
-1. Follow these [instructions](https://developers.printify.com/#create-a-personal-access-token) 
-    under `Create a personal access token` to set Printify API token
-	 Put your token in `../meta/api_token.txt`.
+Required data and config files:
 
-2. Set default shop id
-	 Put your shop id in `../meta/shop_id.txt`.
+- `../data/schedule.csv` for scheduled publishing.
+- `../data/ideas.csv` for mass production input and publication tracking.
+- `../data/variant_map.json` for mapping shirt colors to Printify variant IDs.
+- `../data/prompts/*.txt` for mass production prompt templates.
+- `../meta/api_token.txt` for the Printify API token.
+- `../meta/shop_id.txt` for the Printify shop ID.
+- `../meta/gemini_api_key.txt` for the Gemini API key.
+- `../meta/removebg_api_key.txt` for the remove.bg API key.
+- `../meta/email_address.txt` for the notification recipient.
+- `../meta/cal_credentials.json` for Gmail OAuth credentials.
 
-3. Configure publishing schedule. You can use `python tools.py` to obtain all product ids
-    for the products in your shop
-	 Create/update `../data/schedule.csv` with at least these columns:
-	 - `publish_date` (format: `MM/DD/YYYY`)
-	 - `shop_id`
-	 - `product_id`
-	 - `nick_name`
-	 - `publish_status` (`True` or `False`)
+### schedule.csv
 
-4. Follow these [instructions](https://developers.google.com/workspace/guides/create-credentials) 
-    to configure email notifications (optional)
-	 - Put recipient email in `../meta/email_address.txt`
-	 - Put OAuth client file in `../meta/cal_credentials.json`
-	 - First run will create/update `../meta/mail_token.pickle`
+The scheduled publishing workflow expects these columns:
 
-5. Set scheduled task to run `python src/publish.py` daily (e.g. using cron or Windows Task Scheduler). 
-    On Windows,
-     - Open Task Scheduler using the Start menu
-     - Click "Create Basic Task" on the right and add any name and description
-     - Choose "Daily" and set your desired time
-     - Choose the time of day to run the task (e.g. 9:00 AM)
-     - Choose "Start a program" and browse to your Python executable (e.g. `C:\path\to\python.exe`)
-        in your newly created virtual environment
-     - Add the argument `publish.py` (no quotes or any special characters) 
-     - Set the "Start in" field to the `printify/` directory (e.g. `C:\path\to\printify`)
-     - Click "Finish" to create the task
-     - Test the task by right-clicking it and selecting "Run"
-     - A Command Prompt window should open and run the script, 
-        and you can check the log file for results
+- `publish_date` in `MM/DD/YYYY` format.
+- `shop_id`
+- `product_id`
+- `nick_name`
+- `publish_status`
 
 ## Installation
 
-From the workspace root:
+Using conda:
 
 ```bash
 cd printify
-python -m venv .venv
-source .venv/bin/activate  # Linux/macOS
-# .venv\Scripts\activate   # Windows PowerShell
-pip install requests pandas google-auth google-auth-oauthlib google-api-python-client
+conda env create -f requirements.yml
+conda activate printify-automation
+```
+
+If you already have an environment and just want the packages:
+
+```bash
+cd printify
+pip install pandas requests pillow google-genai google-auth google-auth-oauthlib google-api-python-client
 ```
 
 ## Usage
 
-Run a single publishing job:
+### Scheduled publishing
+
+Run the scheduled Etsy publishing job:
 
 ```bash
 cd printify
 python src/publish.py
 ```
 
-Create one Printify draft product from an existing dry-run output folder:
+What it does:
+
+1. Loads `data/schedule.csv`.
+2. Filters rows scheduled for today.
+3. Skips rows already marked `publish_status=True`.
+4. Publishes remaining drafts through Printify.
+5. Marks successful rows as published.
+6. Sends notification emails when configured.
+7. Writes the updated schedule back to disk.
+
+### Shop utilities
+
+Export all Printify product IDs:
 
 ```bash
 cd printify
-./post_dry_run.sh <folder_slug>
+python src/tools.py get_all_product_ids
 ```
 
-Example:
+Generate `data/variant_map.json` for a blueprint and print provider:
 
 ```bash
-./post_dry_run.sh my_design_title_1
+cd printify
+python src/tools.py get_printify_variant_ids
 ```
 
-This command expects the folder under `../data/images/` to contain dry-run artifacts such as
-`design_transparent.png`, `ideas.json`, `title.txt`, `description.txt`, and `keywords.txt`.
+### Mass production
 
-What happens during a run:
+Run the generation pipeline:
 
-1. Load token and schedule file
-2. Filter rows for today's `publish_date`
-3. Skip rows already marked `publish_status=True`
-4. Publish remaining products via Printify API
-5. Mark successful publishes as `True`
-6. Send success email (if notification config is present)
-7. Save updated schedule CSV
+```bash
+cd printify
+python src/mass_production.py
+```
 
+What the mass production pipeline does:
 
-## Notifications
+1. Reads unused keywords from `data/ideas.csv`.
+2. Generates ideas from the prompt templates.
+3. Produces artwork, transparent artwork, and mockups.
+4. Generates listing title, description, personas, and keyword tags.
+5. Builds Printify payloads and optionally creates draft products.
+6. Saves all generated artifacts under `data/images/<folder_slug>/`.
+7. Updates matching `ideas.csv` rows after successful publishing.
 
-Email notifications are handled in `notification.py` using the Gmail API.
+If there are no rows with `used=false`, the pipeline logs and prints a message instead of running.
 
-If token refresh or auth fails:
+### Post dry-run publishing
 
-- remove `../meta/mail_token.pickle`
-- rerun `python src/publish.py` to reauthorize
+Create one Printify draft from an existing generated folder:
+
+```bash
+cd printify
+python src/mass_production/post_dry_run.py <folder_slug>
+```
+
+This command expects the folder under `data/images/` to contain the dry-run artifacts needed to rebuild the final Printify payload.
+
+## Testing
+
+Run the full test suite:
+
+```bash
+cd printify
+pytest
+```
 
 ## Contributors
 
 Dallin Stewart - dallinpstewart@gmail.com
 
-[![LinkedIn][linkedin-icon]][linkedin-url1] [![GitHub][github-icon]][github-url1] [![Email][email-icon]][email-url1]
-
-
 ## License
 
-Licensed under the Apache License 2.0. See [`LICENSE`](./LICENSE).
-
-
-[linkedIn-icon]: https://img.shields.io/badge/LinkedIn-0077B5?style=for-the-badge&logo=linkedin&logoColor=white
-[linkedIn-url1]: https://www.linkedin.com/in/dallinstewart/
-
-[github-icon]: https://img.shields.io/badge/GitHub-100000?style=for-the-badge&logo=github&logoColor=white
-[github-url1]: https://github.com/binDebug3
-
-[Email-icon]: https://img.shields.io/badge/Email-D14836?style=for-the-badge&logo=gmail&logoColor=white
-[Email-url1]: mailto:dallinpstewart@gmail.com
+Licensed under the Apache License 2.0. See [LICENSE](./LICENSE).

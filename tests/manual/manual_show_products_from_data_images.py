@@ -29,7 +29,7 @@ if str(SRC_ROOT) not in sys.path:
 if str(MASS_PRODUCTION_ROOT) not in sys.path:
     sys.path.insert(0, str(MASS_PRODUCTION_ROOT))
 
-from logger_config import log_action  # noqa: E402
+from schedule.logger_config import log_action  # noqa: E402
 import ui.show_products as show_products_module  # noqa: E402
 
 

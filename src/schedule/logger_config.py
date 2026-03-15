@@ -19,7 +19,9 @@ import logging
 import sys
 from pathlib import Path
 
-LOG_PATH = Path(__file__).resolve().parent.parent.parent / "meta" / "actions.log"
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+LOG_PATH = PROJECT_ROOT / "meta" / "actions.log"
+LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
 logger = logging.getLogger(__name__)
 if not logger.handlers:
     logger.setLevel(logging.INFO)

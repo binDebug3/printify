@@ -14,14 +14,14 @@ from typing import Dict, List, Optional
 import requests
 
 try:
-    from logger_config import log_action
-    from tools import load_api_token
+    from schedule.logger_config import log_action
+    from schedule.tools import load_api_token
 except ModuleNotFoundError:
     SRC_ROOT = Path(__file__).resolve().parents[1]
     if str(SRC_ROOT) not in sys.path:
         sys.path.insert(0, str(SRC_ROOT))
-    from logger_config import log_action
-    from tools import load_api_token
+    from schedule.logger_config import log_action
+    from schedule.tools import load_api_token
     
 # This is janky because these are already definced in mass_production.constants,
 # but I can't import them

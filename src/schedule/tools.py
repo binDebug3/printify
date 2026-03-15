@@ -6,7 +6,7 @@ the specialized modules under src/printify_api_tools.
 
 from typing import Optional
 
-from logger_config import log_action
+from schedule.logger_config import log_action
 
 
 def load_api_token(filepath: Optional[str] = None) -> str:

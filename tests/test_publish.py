@@ -1,4 +1,4 @@
-"""Tests for publish.py.
+﻿"""Tests for publish.py.
 
 Covers main(): missing schedule, today's filter, skip-published logic,
 API call routing, email notification, CSV write-back, and summary output.
@@ -11,7 +11,7 @@ from unittest.mock import patch, MagicMock
 import pandas as pd
 import pytest
 
-import src.publish as publish_module
+import schedule.publish as publish_module
 
 
 TODAY = datetime.now().strftime("%m/%d/%Y")
@@ -52,7 +52,7 @@ def stub_etsy_sync(request):
         yield
         return
 
-    with patch("src.publish._sync_etsy_mockups_after_publish"):
+    with patch("schedule.publish._sync_etsy_mockups_after_publish"):
         yield
 
 
@@ -62,7 +62,7 @@ class TestMain:
     def test_prints_error_when_schedule_missing(self, tmp_path, capsys):
         """Prints an error message and returns early when the schedule file is absent."""
         missing = str(tmp_path / "nonexistent.csv")
-        with patch("src.publish.load_api_token", return_value="tok"):
+        with patch("schedule.publish.load_api_token", return_value="tok"):
             publish_module.main(schedule_file=missing)
 
         assert "not found" in capsys.readouterr().out.lower()
@@ -71,9 +71,9 @@ class TestMain:
         """Does not call publish_product when no rows have today's date."""
         csv = make_schedule(tmp_path, [row(publish_date=OTHER_DAY)])
         with (
-            patch("src.publish.load_api_token", return_value="tok"),
-            patch("src.publish.publish_product") as mock_pub,
-            patch("src.publish.send_email"),
+            patch("schedule.publish.load_api_token", return_value="tok"),
+            patch("schedule.publish.publish_product") as mock_pub,
+            patch("schedule.publish.send_email"),
         ):
             publish_module.main(schedule_file=csv)
 
@@ -84,9 +84,11 @@ class TestMain:
         csv = make_schedule(tmp_path, [row(product_id="p1", shop_id="s1")])
         mock_resp = MagicMock(status_code=200)
         with (
-            patch("src.publish.load_api_token", return_value="tok"),
-            patch("src.publish.publish_product", return_value=mock_resp) as mock_pub,
-            patch("src.publish.send_email"),
+            patch("schedule.publish.load_api_token", return_value="tok"),
+            patch(
+                "schedule.publish.publish_product", return_value=mock_resp
+            ) as mock_pub,
+            patch("schedule.publish.send_email"),
         ):
             publish_module.main(schedule_file=csv)
 
@@ -98,9 +100,11 @@ class TestMain:
         csv = make_schedule(tmp_path, rows)
         mock_resp = MagicMock(status_code=200)
         with (
-            patch("src.publish.load_api_token", return_value="tok"),
-            patch("src.publish.publish_product", return_value=mock_resp) as mock_pub,
-            patch("src.publish.send_email"),
+            patch("schedule.publish.load_api_token", return_value="tok"),
+            patch(
+                "schedule.publish.publish_product", return_value=mock_resp
+            ) as mock_pub,
+            patch("schedule.publish.send_email"),
         ):
             publish_module.main(schedule_file=csv)
 
@@ -112,9 +116,9 @@ class TestMain:
         """Does not call publish_product when publish_status is True."""
         csv = make_schedule(tmp_path, [row(publish_status=True)])
         with (
-            patch("src.publish.load_api_token", return_value="tok"),
-            patch("src.publish.publish_product") as mock_pub,
-            patch("src.publish.send_email"),
+            patch("schedule.publish.load_api_token", return_value="tok"),
+            patch("schedule.publish.publish_product") as mock_pub,
+            patch("schedule.publish.send_email"),
         ):
             publish_module.main(schedule_file=csv)
 
@@ -125,9 +129,9 @@ class TestMain:
         csv = make_schedule(tmp_path, [row()])
         mock_resp = MagicMock(status_code=200)
         with (
-            patch("src.publish.load_api_token", return_value="tok"),
-            patch("src.publish.publish_product", return_value=mock_resp),
-            patch("src.publish.send_email") as mock_email,
+            patch("schedule.publish.load_api_token", return_value="tok"),
+            patch("schedule.publish.publish_product", return_value=mock_resp),
+            patch("schedule.publish.send_email") as mock_email,
         ):
             publish_module.main(schedule_file=csv)
 
@@ -138,9 +142,9 @@ class TestMain:
         csv = make_schedule(tmp_path, [row()])
         mock_resp = MagicMock(status_code=422, text="Unprocessable")
         with (
-            patch("src.publish.load_api_token", return_value="tok"),
-            patch("src.publish.publish_product", return_value=mock_resp),
-            patch("src.publish.send_email") as mock_email,
+            patch("schedule.publish.load_api_token", return_value="tok"),
+            patch("schedule.publish.publish_product", return_value=mock_resp),
+            patch("schedule.publish.send_email") as mock_email,
         ):
             publish_module.main(schedule_file=csv)
 
@@ -151,9 +155,9 @@ class TestMain:
         csv = make_schedule(tmp_path, [row(product_id="p1")])
         mock_resp = MagicMock(status_code=200)
         with (
-            patch("src.publish.load_api_token", return_value="tok"),
-            patch("src.publish.publish_product", return_value=mock_resp),
-            patch("src.publish.send_email"),
+            patch("schedule.publish.load_api_token", return_value="tok"),
+            patch("schedule.publish.publish_product", return_value=mock_resp),
+            patch("schedule.publish.send_email"),
         ):
             publish_module.main(schedule_file=csv)
 
@@ -165,9 +169,9 @@ class TestMain:
         csv = make_schedule(tmp_path, [row(product_id="p1")])
         mock_resp = MagicMock(status_code=500, text="Server Error")
         with (
-            patch("src.publish.load_api_token", return_value="tok"),
-            patch("src.publish.publish_product", return_value=mock_resp),
-            patch("src.publish.send_email"),
+            patch("schedule.publish.load_api_token", return_value="tok"),
+            patch("schedule.publish.publish_product", return_value=mock_resp),
+            patch("schedule.publish.send_email"),
         ):
             publish_module.main(schedule_file=csv)
 
@@ -179,9 +183,9 @@ class TestMain:
         csv = make_schedule(tmp_path, [row(), row(product_id="p2")])
         mock_resp = MagicMock(status_code=200)
         with (
-            patch("src.publish.load_api_token", return_value="tok"),
-            patch("src.publish.publish_product", return_value=mock_resp),
-            patch("src.publish.send_email"),
+            patch("schedule.publish.load_api_token", return_value="tok"),
+            patch("schedule.publish.publish_product", return_value=mock_resp),
+            patch("schedule.publish.send_email"),
         ):
             publish_module.main(schedule_file=csv)
 
@@ -194,9 +198,11 @@ class TestMain:
         csv = make_schedule(tmp_path, rows)
         mock_resp = MagicMock(status_code=200)
         with (
-            patch("src.publish.load_api_token", return_value="tok"),
-            patch("src.publish.publish_product", return_value=mock_resp) as mock_pub,
-            patch("src.publish.send_email"),
+            patch("schedule.publish.load_api_token", return_value="tok"),
+            patch(
+                "schedule.publish.publish_product", return_value=mock_resp
+            ) as mock_pub,
+            patch("schedule.publish.send_email"),
         ):
             publish_module.main(schedule_file=csv)
 
@@ -218,10 +224,10 @@ class TestMain:
         )
 
         with (
-            patch("src.publish.load_api_token", return_value="tok"),
-            patch("src.publish.publish_product", return_value=mock_resp),
-            patch("src.publish.send_email"),
-            patch("src.publish.time.sleep") as mock_sleep,
+            patch("schedule.publish.load_api_token", return_value="tok"),
+            patch("schedule.publish.publish_product", return_value=mock_resp),
+            patch("schedule.publish.send_email"),
+            patch("schedule.publish.time.sleep") as mock_sleep,
             patch.dict(
                 sys.modules,
                 {
@@ -248,10 +254,10 @@ class TestMain:
         csv = make_schedule(tmp_path, [row(product_id="p1", publish_status=True)])
 
         with (
-            patch("src.publish.load_api_token", return_value="tok"),
-            patch("src.publish.publish_product") as mock_publish,
-            patch("src.publish.send_email"),
-            patch("src.publish.time.sleep") as mock_sleep,
+            patch("schedule.publish.load_api_token", return_value="tok"),
+            patch("schedule.publish.publish_product") as mock_publish,
+            patch("schedule.publish.send_email"),
+            patch("schedule.publish.time.sleep") as mock_sleep,
         ):
             publish_module.main(schedule_file=csv)
 

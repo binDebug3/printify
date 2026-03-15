@@ -9,7 +9,7 @@ import time
 from pathlib import Path
 from typing import Any, List, Dict, Optional
 
-from logger_config import log_action
+from schedule.logger_config import log_action
 
 import constants
 from photoshop.design_crop import crop_design_image_to_content, create_default_color_mockup

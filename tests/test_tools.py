@@ -26,7 +26,7 @@ from src.printify_api_tools.publish_product import (
     parse_args as publish_product_parse_args,
     publish_product,
 )
-from src.tools import (
+from schedule.tools import (
     load_api_token,
     load_shop_id,
 )

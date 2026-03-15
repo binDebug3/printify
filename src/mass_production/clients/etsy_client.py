@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 import constants
-from logger_config import log_action
+from schedule.logger_config import log_action
 from models import EtsyConfig
 
 

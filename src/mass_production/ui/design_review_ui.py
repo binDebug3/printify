@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
-from logger_config import log_action
+from schedule.logger_config import log_action
 
 
 def _build_html(keyword: str) -> str:

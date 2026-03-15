@@ -8,7 +8,7 @@ from typing import Any, List
 
 import pandas as pd
 from PIL import Image
-from logger_config import log_action
+from schedule.logger_config import log_action
 
 
 def cut(path: Path, separator: str = "automation") -> str:

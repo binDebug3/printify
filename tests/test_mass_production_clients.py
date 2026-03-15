@@ -242,7 +242,7 @@ class TestRemoveBgClient:
         result = client.remove_background(input_buffer.getvalue())
 
         output_image = Image.open(BytesIO(result)).convert("RGBA")
-        assert list(output_image.getdata())[:3] == [
+        assert list(output_image.getdata())[:3] == [  # type: ignore
             (255, 255, 255, 0),
             (255, 255, 255, 0),
             (0, 0, 0, 255),
@@ -271,7 +271,7 @@ class TestRemoveBgClient:
         result = client.remove_background(input_buffer.getvalue())
 
         output_image = Image.open(BytesIO(result)).convert("RGBA")
-        assert list(output_image.getdata()) == [
+        assert list(output_image.getdata()) == [  # type: ignore
             (0, 0, 0, 0),
             (0, 0, 0, 0),
             (0, 0, 0, 0),

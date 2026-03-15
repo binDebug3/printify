@@ -9,7 +9,7 @@ import re
 from typing import Optional
 
 from PIL import Image
-from logger_config import log_action
+from schedule.logger_config import log_action
 
 
 FOREGROUND_TOLERANCE: int = 10

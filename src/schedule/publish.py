@@ -11,10 +11,10 @@ from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
 
-from logger_config import log_action
-from notification import send_email
+from schedule.logger_config import log_action
+from schedule.notification import send_email
 from printify_api_tools.publish_product import publish_product
-from tools import load_api_token
+from schedule.tools import load_api_token
 
 
 def _configure_mass_production_module_path() -> None:

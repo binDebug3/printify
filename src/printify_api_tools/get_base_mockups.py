@@ -16,16 +16,16 @@ from typing import Dict, List, Optional, Tuple
 import requests
 
 try:
-    from logger_config import log_action
-    from tools import load_api_token
-    from tools import load_shop_id
+    from schedule.logger_config import log_action
+    from schedule.tools import load_api_token
+    from schedule.tools import load_shop_id
 except ModuleNotFoundError:
     SRC_ROOT = Path(__file__).resolve().parents[1]
     if str(SRC_ROOT) not in sys.path:
         sys.path.insert(0, str(SRC_ROOT))
-    from logger_config import log_action
-    from tools import load_api_token
-    from tools import load_shop_id
+    from schedule.logger_config import log_action
+    from schedule.tools import load_api_token
+    from schedule.tools import load_shop_id
 
 PRINTIFY_API_BASE_URL: str = "https://api.printify.com/v1"
 REQUEST_TIMEOUT_SECONDS: int = 30

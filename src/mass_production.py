@@ -6,7 +6,7 @@ import subprocess
 import sys
 from pathlib import Path
 from typing import Any
-from logger_config import log_action
+from schedule.logger_config import log_action
 
 
 def _open_actions_log_in_vscode() -> None:

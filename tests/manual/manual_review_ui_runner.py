@@ -24,7 +24,7 @@ if str(MASS_PRODUCTION_ROOT) not in sys.path:
     sys.path.insert(0, str(MASS_PRODUCTION_ROOT))
 
 from ui.design_review_ui import review_generated_designs  # noqa: E402
-from logger_config import log_action  # noqa: E402
+from schedule.logger_config import log_action  # noqa: E402
 
 
 DEFAULT_SAMPLE_FOLDERS: List[str] = [

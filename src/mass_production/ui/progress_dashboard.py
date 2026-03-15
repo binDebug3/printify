@@ -8,7 +8,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
-from logger_config import log_action
+from schedule.logger_config import log_action
 
 
 IMAGE_SLOT_LABELS: Dict[str, str] = {

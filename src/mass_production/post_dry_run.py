@@ -15,7 +15,7 @@ SRC_ROOT = Path(__file__).resolve().parents[1]
 if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
-from logger_config import log_action  # noqa: E402
+from schedule.logger_config import log_action  # noqa: E402
 
 import constants  # noqa: E402
 from photoshop.io_utils import read_json, read_text  # noqa: E402

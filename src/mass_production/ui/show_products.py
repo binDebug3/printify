@@ -21,12 +21,12 @@ import requests
 import constants
 
 try:
-    from logger_config import log_action
+    from schedule.logger_config import log_action
 except ModuleNotFoundError:
     SRC_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
     if SRC_ROOT not in sys.path:
         sys.path.insert(0, SRC_ROOT)
-    from logger_config import log_action
+    from schedule.logger_config import log_action
 
 
 DEFAULT_HOST: str = "127.0.0.1"

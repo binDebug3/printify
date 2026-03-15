@@ -9,7 +9,7 @@ from typing import Any, Dict, List
 import requests
 
 import constants
-from logger_config import log_action
+from schedule.logger_config import log_action
 from photoshop.io_utils import cut
 
 

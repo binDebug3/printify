@@ -14,7 +14,7 @@ from logger_config import log_action
 import constants
 from design_crop import crop_design_image_to_content, create_default_color_mockup
 from design_review_ui import review_generated_designs
-from gemini_client import GeminiClient
+from clients.gemini_client import GeminiClient
 from io_utils import (
     crop_center_percent,
     mark_idea_as_published,
@@ -31,7 +31,7 @@ from io_utils import (
     cut,
 )
 from models import Idea
-from printify_client import PrintifyClient
+from clients.printify_client import PrintifyClient
 from remove_bg import RemoveBgClient
 
 

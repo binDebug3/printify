@@ -15,7 +15,7 @@ import requests
 
 import constants
 from models import EtsyConfig
-from etsy_client import EtsyClient
+from clients.etsy_client import EtsyClient
 from logger_config import log_action
 from tools import load_api_token
 

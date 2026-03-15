@@ -15,8 +15,8 @@ MASS_PRODUCTION_ROOT = (
 if str(MASS_PRODUCTION_ROOT) not in sys.path:
     sys.path.insert(0, str(MASS_PRODUCTION_ROOT))
 
-import gemini_client as gemini_module  # noqa: E402
-import printify_client as printify_module  # noqa: E402
+import clients.gemini_client as gemini_module  # noqa: E402
+import clients.printify_client as printify_module  # noqa: E402
 import remove_bg as remove_bg_module  # noqa: E402
 
 

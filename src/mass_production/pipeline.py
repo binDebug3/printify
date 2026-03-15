@@ -12,7 +12,10 @@ from typing import Any, List, Dict, Optional
 from schedule.logger_config import log_action
 
 import constants
-from photoshop.design_crop import crop_design_image_to_content, create_default_color_mockup
+from photoshop.design_crop import (
+    crop_design_image_to_content,
+    create_default_color_mockup,
+)
 from ui.design_review_ui import review_generated_designs
 from clients.gemini_client import GeminiClient
 from photoshop.io_utils import (
@@ -427,7 +430,21 @@ def _generate_post_design_assets(
     )
 
     # mockup background
-    background_prompt: str = f"{prompts['background']}\n\nDesign JSON:\n{idea_json}"
+    beneficiary_personas_path: Path = idea.folder_path / "beneficiary_personas.txt"
+    beneficiary_personas_text: str = ""
+    if beneficiary_personas_path.exists():
+        beneficiary_personas_text = read_text(beneficiary_personas_path).strip()
+    else:
+        log_action(
+            f"Beneficiary personas file not found for '{idea.title}': "
+            f"{cut(beneficiary_personas_path)}"
+        )
+
+    background_prompt: str = (
+        f"Design JSON:\n{idea_json}\n\n"
+        f"Beneficiary Personas:\n{beneficiary_personas_text}\n\n"
+        f"{prompts['background']}"
+    )
     log_action(f"Generating background text for '{idea.title}'")
     background_text: str = gemini.generate_text(background_prompt).strip()
     write_text(idea.folder_path / "background.txt", background_text)
@@ -444,11 +461,9 @@ def _generate_post_design_assets(
     default_mockup_bytes: bytes = default_mockup_path.read_bytes()
 
     shirt_color_mockup: str = mockup_color
-    model_gender: str = "male"
     mockup_prompt: str = (
         f"Make the t shirt color {shirt_color_mockup}"
-        f"Use a {model_gender} model.\n"
-        f"Background scene: {background_text}\n"
+        f"Model description and background scene: {background_text}\n"
         f"{prompts['mockup']}\n\n"
     )
     log_action(f"Generating mockup image for '{idea.title}'")
@@ -604,12 +619,33 @@ def _generate_listing_fields(
     description_prompt: str = f"{prompts['description']}\n\nDesign JSON:\n{idea_json}"
     generated_description_raw: str = gemini.generate_text(description_prompt).strip()
 
-    personas_text: str = ""
-    generated_description: str = generated_description_raw
-    if "$$$" in generated_description_raw:
-        personas_text, generated_description = [
-            part.strip() for part in generated_description_raw.split("$$$", maxsplit=1)
-        ]
+    description_payload: dict[str, Any] = {}
+    try:
+        parsed_payload: Any = json.loads(generated_description_raw)
+        if isinstance(parsed_payload, dict):
+            description_payload = parsed_payload
+    except json.JSONDecodeError:
+        match = re.search(r"\{.*\}", generated_description_raw, re.DOTALL)
+        if match:
+            try:
+                parsed_payload = json.loads(match.group(0))
+                if isinstance(parsed_payload, dict):
+                    description_payload = parsed_payload
+            except json.JSONDecodeError:
+                description_payload = {}
+
+    buyer_persona_1: str = str(description_payload.get("buyer_persona_1", "")).strip()
+    buyer_persona_2: str = str(description_payload.get("buyer_persona_2", "")).strip()
+    beneficiary_persona_1: str = str(
+        description_payload.get("beneficiary_persona_1", "")
+    ).strip()
+    beneficiary_persona_2: str = str(
+        description_payload.get("beneficiary_persona_2", "")
+    ).strip()
+
+    generated_description: str = str(
+        description_payload.get("listing_description", generated_description_raw)
+    ).strip()
 
     full_description: str = (
         f"{generated_description}\n\n{prompts['default_description']}"
@@ -625,7 +661,17 @@ def _generate_listing_fields(
     )[: constants.KEYWORDS_COUNT]
 
     write_text(idea.folder_path / "title.txt", generated_title)
-    write_text(idea.folder_path / "buyer_personas.txt", personas_text)
+    buyer_personas_text: str = (
+        f"Buyer Persona 1:\n{buyer_persona_1}\n\nBuyer Persona 2:\n{buyer_persona_2}"
+    )
+    beneficiary_personas_text: str = (
+        "Beneficiary Persona 1:\n"
+        f"{beneficiary_persona_1}\n\n"
+        "Beneficiary Persona 2:\n"
+        f"{beneficiary_persona_2}"
+    )
+    write_text(idea.folder_path / "buyer_personas.txt", buyer_personas_text)
+    write_text(idea.folder_path / "beneficiary_personas.txt", beneficiary_personas_text)
     write_text(idea.folder_path / "description.txt", full_description)
     write_text(idea.folder_path / "keywords.txt", json.dumps(keywords, indent=2))
 

@@ -14,6 +14,8 @@ from src.printify_api_tools.get_product_info import (
     parse_args as product_info_parse_args,
 )
 from src.printify_api_tools.get_variant_info import (
+    COMFORT_COLORS_BLUEPRINT_ID,
+    COMFORT_COLORS_PRINT_PROVIDER_ID,
     get_printify_variant_ids,
     main as variant_info_main,
     parse_args as variant_info_parse_args,
@@ -25,8 +27,6 @@ from src.printify_api_tools.publish_product import (
     publish_product,
 )
 from src.tools import (
-    COMFORT_COLORS_BLUEPRINT_ID,
-    COMFORT_COLORS_PRINT_PROVIDER_ID,
     load_api_token,
     load_shop_id,
 )

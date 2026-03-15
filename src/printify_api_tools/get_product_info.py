@@ -15,8 +15,6 @@ import requests
 
 try:
     from logger_config import log_action
-    from tools import DEFAULT_PRODUCTS_PAGE_SIZE
-    from tools import SUCCESS
     from tools import load_api_token
     from tools import load_shop_id
 except ModuleNotFoundError:
@@ -24,10 +22,12 @@ except ModuleNotFoundError:
     if str(SRC_ROOT) not in sys.path:
         sys.path.insert(0, str(SRC_ROOT))
     from logger_config import log_action
-    from tools import DEFAULT_PRODUCTS_PAGE_SIZE
-    from tools import SUCCESS
     from tools import load_api_token
     from tools import load_shop_id
+
+
+DEFAULT_PRODUCTS_PAGE_SIZE: int = 50
+SUCCESS: int = 200
 
 
 def get_all_products(

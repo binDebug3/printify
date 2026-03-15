@@ -8,11 +8,6 @@ from typing import Optional
 
 from logger_config import log_action
 
-COMFORT_COLORS_BLUEPRINT_ID: int = 706
-COMFORT_COLORS_PRINT_PROVIDER_ID: int = 99
-SUCCESS: int = 200
-DEFAULT_PRODUCTS_PAGE_SIZE: int = 50
-
 
 def load_api_token(filepath: Optional[str] = None) -> str:
     """
@@ -57,13 +52,3 @@ def load_shop_id() -> str:
 
     log_action("shop id loaded successfully")
     return shop_id
-
-
-__all__ = [
-    "COMFORT_COLORS_BLUEPRINT_ID",
-    "COMFORT_COLORS_PRINT_PROVIDER_ID",
-    "DEFAULT_PRODUCTS_PAGE_SIZE",
-    "SUCCESS",
-    "load_api_token",
-    "load_shop_id",
-]

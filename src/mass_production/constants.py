@@ -36,11 +36,16 @@ PRINTIFY_API_BASE_URL: str = "https://api.printify.com/v1"
 PRINTIFY_USER_AGENT: str = "printify-automation"
 REMOVE_BG_API: str = "api"
 REMOVE_BG_MANUAL: str = "manual"
+REMOVE_BG_SMART: str = "smart"
+SMART_BG_MATTE_START: float = 14.0
+SMART_BG_MATTE_END: float = 95.0
+SMART_BG_FEATHER_RADIUS: float = 1.1
+SMART_BG_EDGE_ALPHA_MIN: float = 0.08
 
 # WORKFLOW SETTINGS
 REVIEW_DESIGNS: bool = True
 ENABLE_PROGRESS_UI: bool = True
-BACKGROUND_REMOVAL_MODE: str = REMOVE_BG_MANUAL
+BACKGROUND_REMOVAL_MODE: str = REMOVE_BG_SMART
 IDEAS_PER_KEYWORD: int = 2
 
 # Runtime behavior

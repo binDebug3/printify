@@ -7,7 +7,9 @@ import time
 from pathlib import Path
 from typing import Dict, Tuple
 
+import numpy as np
 from PIL import Image
+from PIL import ImageFilter
 import requests
 
 try:
@@ -27,6 +29,10 @@ class RemoveBgClient:
         endpoint: remove.bg endpoint URL.
         retries: Maximum retries for transient failures.
         removal_mode: Background removal mode, either "api" or "manual".
+        smart_matte_start: Start threshold for smart alpha ramp.
+        smart_matte_end: End threshold for smart alpha ramp.
+        smart_feather_radius: Gaussian blur radius for edge feathering.
+        smart_edge_alpha_min: Lower bound alpha used during edge decontamination.
     """
 
     def __init__(
@@ -35,11 +41,19 @@ class RemoveBgClient:
         endpoint: str,
         retries: int = 2,
         removal_mode: str = "api",
+        smart_matte_start: float = 14.0,
+        smart_matte_end: float = 95.0,
+        smart_feather_radius: float = 1.1,
+        smart_edge_alpha_min: float = 0.08,
     ):
         self._api_key: str = api_key
         self._endpoint: str = endpoint
         self._retries: int = retries
         self._removal_mode: str = removal_mode.strip().lower()
+        self._smart_matte_start: float = smart_matte_start
+        self._smart_matte_end: float = smart_matte_end
+        self._smart_feather_radius: float = smart_feather_radius
+        self._smart_edge_alpha_min: float = smart_edge_alpha_min
 
     def remove_background(self, image_bytes: bytes) -> bytes:
         """Remove background from an image.
@@ -58,6 +72,8 @@ class RemoveBgClient:
             return self._remove_background_via_api(image_bytes)
         if self._removal_mode == "manual":
             return self._remove_background_manually(image_bytes)
+        if self._removal_mode == "smart":
+            return self._remove_background_smart(image_bytes)
         raise ValueError(f"Unsupported background removal mode '{self._removal_mode}'")
 
     def _remove_background_via_api(self, image_bytes: bytes) -> bytes:
@@ -130,6 +146,125 @@ class RemoveBgClient:
             f"Manual background removal selected black pixels ({black_removed} transparent)"
         )
         return black_bytes
+
+    def _remove_background_smart(self, image_bytes: bytes) -> bytes:
+        """Create a soft alpha matte for white/black backgrounds with cleaner edges.
+
+        This mode assumes the dominant background is black or white, estimates which
+        one is present from border pixels, and then computes a smooth per-pixel alpha
+        based on color distance from that background. It also feathers the transition
+        band and decontaminates edge colors to reduce dark/bright halos.
+
+        Args:
+            image_bytes: Source image bytes.
+
+        Returns:
+            PNG bytes with refined transparency.
+        """
+        log_action("Running smart background removal with soft matte")
+        rgba_image: Image.Image = Image.open(BytesIO(image_bytes)).convert("RGBA")
+        rgba_array: np.ndarray = np.asarray(rgba_image, dtype=np.uint8)
+        rgb_array: np.ndarray = rgba_array[..., :3].astype(np.float32)
+        source_alpha: np.ndarray = rgba_array[..., 3].astype(np.float32) / 255.0
+
+        background_rgb: np.ndarray = self._estimate_background_color_from_border(
+            rgb_array=rgb_array
+        )
+        color_distance: np.ndarray = np.linalg.norm(
+            rgb_array - background_rgb.reshape((1, 1, 3)),
+            axis=2,
+        )
+
+        # Distances below matte_start are treated as background, above matte_end
+        # as foreground, with a smooth gradient in-between.
+        matte_start: float = float(self._smart_matte_start)
+        matte_end: float = float(self._smart_matte_end)
+        alpha_matte: np.ndarray = np.clip(
+            (color_distance - matte_start) / (matte_end - matte_start),
+            0.0,
+            1.0,
+        )
+
+        matte_image: Image.Image = Image.fromarray(
+            (alpha_matte * 255.0).astype(np.uint8),
+            mode="L",
+        )
+        blurred_matte_raw: np.ndarray = np.asarray(
+            matte_image.filter(
+                ImageFilter.GaussianBlur(radius=float(self._smart_feather_radius))
+            ),
+            dtype=np.float32,
+        )
+        blurred_matte: np.ndarray = blurred_matte_raw / 255.0
+
+        transition_band: np.ndarray = (alpha_matte > 0.0) & (alpha_matte < 1.0)
+        alpha_matte[transition_band] = blurred_matte[transition_band]
+
+        final_alpha: np.ndarray = np.clip(alpha_matte * source_alpha, 0.0, 1.0)
+        cleaned_rgb: np.ndarray = rgb_array.copy()
+
+        edge_band: np.ndarray = (final_alpha > 0.02) & (final_alpha < 0.98)
+        if bool(np.any(edge_band)):
+            safe_alpha: np.ndarray = np.clip(
+                final_alpha[edge_band],
+                float(self._smart_edge_alpha_min),
+                1.0,
+            )
+            foreground_rgb: np.ndarray = rgb_array[edge_band]
+            background_contribution: np.ndarray = (
+                1.0 - safe_alpha[:, np.newaxis]
+            ) * background_rgb[np.newaxis, :]
+            cleaned_rgb[edge_band] = (
+                foreground_rgb - background_contribution
+            ) / safe_alpha[:, np.newaxis]
+
+        output_rgba: np.ndarray = np.empty_like(rgba_array)
+        output_rgba[..., :3] = np.clip(cleaned_rgb, 0.0, 255.0).astype(np.uint8)
+        output_rgba[..., 3] = (final_alpha * 255.0).astype(np.uint8)
+
+        output_image: Image.Image = Image.fromarray(output_rgba, mode="RGBA")
+        output_buffer = BytesIO()
+        output_image.save(output_buffer, format="PNG")
+        return output_buffer.getvalue()
+
+    def _estimate_background_color_from_border(
+        self,
+        rgb_array: np.ndarray,
+    ) -> np.ndarray:
+        """Estimate whether border background is closer to black or white.
+
+        Args:
+            rgb_array: Source RGB array of shape (H, W, 3).
+
+        Returns:
+            RGB vector for estimated background color.
+        """
+        top_row: np.ndarray = rgb_array[0, :, :]
+        bottom_row: np.ndarray = rgb_array[-1, :, :]
+        left_col: np.ndarray = rgb_array[:, 0, :]
+        right_col: np.ndarray = rgb_array[:, -1, :]
+        border_pixels: np.ndarray = np.vstack(
+            [top_row, bottom_row, left_col, right_col]
+        )
+
+        white_distance: np.ndarray = np.linalg.norm(255.0 - border_pixels, axis=1)
+        black_distance: np.ndarray = np.linalg.norm(border_pixels, axis=1)
+
+        white_vote_ratio: float = float(np.mean(white_distance <= black_distance))
+        if white_vote_ratio >= 0.5:
+            white_vote_pct: float = white_vote_ratio * 100.0
+            log_action(
+                "Smart background removal selected white background "
+                f"({white_vote_pct:.1f}% border vote)"
+            )
+            return np.array([255.0, 255.0, 255.0], dtype=np.float32)
+
+        black_vote_pct: float = (1.0 - white_vote_ratio) * 100.0
+        log_action(
+            "Smart background removal selected black background "
+            f"({black_vote_pct:.1f}% border vote)"
+        )
+        return np.array([0.0, 0.0, 0.0], dtype=np.float32)
 
     def _make_color_transparent(
         self,

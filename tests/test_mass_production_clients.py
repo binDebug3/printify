@@ -277,3 +277,42 @@ class TestRemoveBgClient:
             (0, 0, 0, 0),
             (255, 255, 255, 255),
         ]
+
+    def test_remove_background_smart_mode_softens_transition_edges(self):
+        """Produces partial alpha around near-background edge colors for smoother cutout."""
+        client = remove_bg_module.RemoveBgClient(
+            "key",
+            "https://remove.bg",
+            retries=2,
+            removal_mode="smart",
+        )
+        image = Image.new("RGBA", (3, 1))
+        image.putdata(
+            [
+                (255, 255, 255, 255),
+                (235, 235, 235, 255),
+                (120, 20, 20, 255),
+            ]
+        )
+        input_buffer = BytesIO()
+        image.save(input_buffer, format="PNG")
+
+        result = client.remove_background(input_buffer.getvalue())
+
+        output_image = Image.open(BytesIO(result)).convert("RGBA")
+        output_pixels = list(output_image.getdata())  # type: ignore
+        assert output_pixels[0][3] <= 10
+        assert 10 < output_pixels[1][3] < 245
+        assert output_pixels[2][3] >= 245
+
+    def test_remove_background_raises_for_unsupported_mode(self):
+        """Raises a clear error when an unknown removal mode is configured."""
+        client = remove_bg_module.RemoveBgClient(
+            "key",
+            "https://remove.bg",
+            retries=1,
+            removal_mode="not-a-mode",
+        )
+
+        with pytest.raises(ValueError, match="Unsupported background removal mode"):
+            client.remove_background(b"image-bytes")

@@ -43,7 +43,9 @@ class TestRunPipeline:
         with (
             patch.object(pipeline_module, "_load_prompts", return_value={}),
             patch.object(
-                pipeline_module, "read_keywords_from_ideas_csv", return_value=[]
+                pipeline_module,
+                "read_keywords_from_ideas_csv",
+                return_value=([], []),
             ),
             patch.object(
                 pipeline_module,
@@ -107,7 +109,9 @@ class TestRunPipeline:
                 },
             ),
             patch.object(
-                pipeline_module, "read_keywords_from_ideas_csv", return_value=["alpha"]
+                pipeline_module,
+                "read_keywords_from_ideas_csv",
+                return_value=(["alpha"], ["retro stripe"]),
             ),
             patch.object(
                 pipeline_module,
@@ -225,7 +229,9 @@ class TestRunPipeline:
                 },
             ),
             patch.object(
-                pipeline_module, "read_keywords_from_ideas_csv", return_value=["alpha"]
+                pipeline_module,
+                "read_keywords_from_ideas_csv",
+                return_value=(["alpha"], ["retro stripe"]),
             ),
             patch.object(
                 pipeline_module,
@@ -315,7 +321,9 @@ class TestRunPipeline:
                 },
             ),
             patch.object(
-                pipeline_module, "read_keywords_from_ideas_csv", return_value=["alpha"]
+                pipeline_module,
+                "read_keywords_from_ideas_csv",
+                return_value=(["alpha"], ["retro stripe"]),
             ),
             patch.object(
                 pipeline_module,

@@ -185,6 +185,7 @@ def _generate_ideas_for_keyword(
     gemini: GeminiClient,
     design_prompt: str,
     keyword: str,
+    context: str,
     ideas_per_keyword: int,
 ) -> List[Dict[str, Any]]:
     """Generate normalized idea payloads for a keyword.
@@ -193,6 +194,7 @@ def _generate_ideas_for_keyword(
         gemini: Gemini text/image client.
         design_prompt: Base design prompt template.
         keyword: Source keyword.
+        context: Space-separated context words associated with the keyword.
         ideas_per_keyword: Number of ideas to generate.
 
     Returns:
@@ -202,6 +204,7 @@ def _generate_ideas_for_keyword(
     prompt: str = (
         f"{design_prompt}\n\n"
         f"Keyword: {keyword}\n"
+        f"Context: {context}\n"
         f"Generate exactly {ideas_per_keyword} ideas."
     )
     response_text: str = gemini.generate_text(prompt)
@@ -739,7 +742,7 @@ def run_pipeline(
     _safe_dashboard_call(dashboard, "set_stage", "Loading prompts and input files")
     try:
         prompts: Dict[str, str] = _load_prompts()
-        keywords: List[str] = read_keywords_from_ideas_csv(
+        keywords, contexts = read_keywords_from_ideas_csv(
             constants.IDEAS_CSV_PATH, limit=constants.MAX_KEYWORDS_PER_RUN
         )
         color_to_ids: Dict[str, List[int]] = _load_color_to_ids_map(
@@ -782,6 +785,10 @@ def run_pipeline(
             endpoint=constants.REMOVE_BG_URL,
             retries=constants.MAX_REMOVEBG_RETRIES,
             removal_mode=background_removal_mode,
+            smart_matte_start=constants.SMART_BG_MATTE_START,
+            smart_matte_end=constants.SMART_BG_MATTE_END,
+            smart_feather_radius=constants.SMART_BG_FEATHER_RADIUS,
+            smart_edge_alpha_min=constants.SMART_BG_EDGE_ALPHA_MIN,
         )
         printify_client: PrintifyClient = PrintifyClient(
             token=printify_token,
@@ -799,7 +806,7 @@ def run_pipeline(
         )
 
         total_ideas_scheduled: int = 0
-        for idx, keyword in enumerate(keywords, start=1):
+        for idx, (keyword, context) in enumerate(zip(keywords, contexts), start=1):
             _safe_dashboard_call(dashboard, "set_keyword", keyword, idx, len(keywords))
             _safe_dashboard_call(
                 dashboard,
@@ -813,6 +820,7 @@ def run_pipeline(
                     gemini=gemini,
                     design_prompt=prompts["design"],
                     keyword=keyword,
+                    context=context,
                     ideas_per_keyword=constants.IDEAS_PER_KEYWORD,
                 )
                 filtered_ideas, filter_metadata = _filter_ideas_for_keyword(

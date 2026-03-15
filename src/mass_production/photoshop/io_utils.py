@@ -92,28 +92,43 @@ def write_bytes(path: Path, data: bytes) -> None:
     path.write_bytes(data)
 
 
-def read_keywords_from_ideas_csv(path: Path, limit: int | None = None) -> List[str]:
-    """Load unused keywords from ideas.csv.
+def read_keywords_from_ideas_csv(
+    path: Path,
+    limit: int | None = None,
+) -> tuple[list[str], list[str]]:
+    """Load unused keyword/context pairs from ideas.csv.
 
     Args:
         path: CSV path with columns including idea and used.
         limit: Optional maximum keyword count.
 
     Returns:
-        Ordered list of unused keyword strings.
+        Tuple of ordered lists: (keywords, contexts).
+
+        Context values come from the optional context column. When absent or
+        blank, context entries are empty strings.
     """
     log_action(f"Reading keywords from '{cut(path)}' with limit={limit}")
     ideas_df: pd.DataFrame = pd.read_csv(path)
     if "idea" not in ideas_df.columns or "used" not in ideas_df.columns:
-        return []
+        return [], []
 
     keyword_series: pd.Series = ideas_df["idea"].astype(str).str.strip()
     used_series: pd.Series = ideas_df["used"].astype(str).str.strip().str.lower()
+    if "context" in ideas_df.columns:
+        context_series: pd.Series = (
+            ideas_df["context"].fillna("").astype(str).str.split().str.join(" ")
+        )
+    else:
+        context_series = pd.Series([""] * len(ideas_df), index=ideas_df.index)
+
     unused_mask: pd.Series = (keyword_series != "") & (used_series == "false")
-    keywords: List[str] = keyword_series.loc[unused_mask].tolist()
+    keywords: list[str] = keyword_series.loc[unused_mask].tolist()
+    contexts: list[str] = context_series.loc[unused_mask].tolist()
+
     if limit is not None:
-        return keywords[:limit]
-    return keywords
+        return keywords[:limit], contexts[:limit]
+    return keywords, contexts
 
 
 def mark_idea_as_published(
@@ -132,7 +147,7 @@ def mark_idea_as_published(
         True when at least one row was updated; otherwise False.
     """
     log_action(
-        f"Updating published keyword '{keyword}' in '{path}' with shirt_count={shirt_count}"
+        f"Updating published keyword '{keyword}' in '{cut(path)}' with shirt_count={shirt_count}"
     )
     ideas_df: pd.DataFrame = pd.read_csv(path)
     if "idea" not in ideas_df.columns or "used" not in ideas_df.columns:

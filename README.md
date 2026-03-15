@@ -181,6 +181,9 @@ conda run --no-capture-output -n lila python -u .\src\mass_production.py --real-
 Manual design review is controlled by `REVIEW_DESIGNS` in
 `src/mass_production/constants.py`.
 
+Live desktop progress dashboard is controlled by `ENABLE_PROGRESS_UI` in
+`src/mass_production/constants.py`.
+
 Core flow:
 
 1. Read unused keywords from `data/ideas.csv`.

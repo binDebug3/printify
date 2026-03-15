@@ -7,7 +7,7 @@ import time
 
 # import random
 from pathlib import Path
-from typing import Any, List, Dict
+from typing import Any, List, Dict, Optional
 
 from logger_config import log_action
 
@@ -359,6 +359,7 @@ def _generate_design_image(
     idea: Idea,
     prompts: dict[str, str],
     gemini: GeminiClient,
+    dashboard: Optional[Any] = None,
 ) -> tuple[Path, bytes]:
     """Generate and save the primary design image for an idea.
 
@@ -380,6 +381,7 @@ def _generate_design_image(
     )
     design_path: Path = idea.folder_path / "design.png"
     write_bytes(design_path, design_bytes)
+    _safe_dashboard_call(dashboard, "update_image", "raw_design", design_path)
     return design_path, design_bytes
 
 
@@ -390,6 +392,7 @@ def _generate_post_design_assets(
     remove_bg_client: RemoveBgClient,
     design_path: Path,
     design_bytes: bytes,
+    dashboard: Optional[Any] = None,
 ) -> tuple[Path, Path, Path]:
     """Create transparent design, mockup, and cropped mockup assets.
 
@@ -416,6 +419,12 @@ def _generate_post_design_assets(
     transparent_bytes: bytes = remove_bg_client.remove_background(design_bytes)
     transparent_path: Path = idea.folder_path / "design_transparent.png"
     write_bytes(transparent_path, transparent_bytes)
+    _safe_dashboard_call(
+        dashboard,
+        "update_image",
+        "transparent_design",
+        transparent_path,
+    )
 
     # mockup background
     background_prompt: str = f"{prompts['background']}\n\nDesign JSON:\n{idea_json}"
@@ -428,6 +437,9 @@ def _generate_post_design_assets(
         design_path=design_path,
         color=mockup_color,
         output_dir=idea.folder_path,
+    )
+    _safe_dashboard_call(
+        dashboard, "update_image", "default_mockup", default_mockup_path
     )
     default_mockup_bytes: bytes = default_mockup_path.read_bytes()
 
@@ -447,6 +459,7 @@ def _generate_post_design_assets(
     slugified_color: str = slugify_title(shirt_color_mockup)
     mockup_path: Path = idea.folder_path / f"mockup_({slugified_color}).png"
     write_bytes(mockup_path, mockup_bytes)
+    _safe_dashboard_call(dashboard, "update_image", "generated_mockup", mockup_path)
 
     # cropped mockup
     log_action(f"Cropping mockup image for '{idea.title}'")
@@ -454,6 +467,9 @@ def _generate_post_design_assets(
         idea.folder_path / f"mockup_({slugified_color})_cropped.png"
     )
     crop_center_percent(mockup_path, mockup_cropped_path, constants.CROP_CENTER_PERCENT)
+    _safe_dashboard_call(
+        dashboard, "update_image", "cropped_mockup", mockup_cropped_path
+    )
 
     return transparent_path, mockup_path, mockup_cropped_path
 
@@ -464,6 +480,7 @@ def _run_manual_design_review(
     prompts: dict[str, str],
     gemini: GeminiClient,
     max_retries: int,
+    dashboard: Optional[Any] = None,
 ) -> list[dict[str, Any]]:
     """Run manual keep/retry/reject review for generated designs.
 
@@ -539,6 +556,7 @@ def _run_manual_design_review(
                 idea=idea,
                 prompts=prompts,
                 gemini=gemini,
+                dashboard=dashboard,
             )
             entry["design_bytes"] = design_bytes
             entry["retry_count"] = retry_count + 1
@@ -633,6 +651,44 @@ def _select_colors(idea: Idea, color_to_ids: Dict[str, List[int]]) -> List[str]:
     return list(color_to_ids.keys())
 
 
+def _create_progress_dashboard() -> Optional[Any]:
+    """Create the optional pipeline progress dashboard.
+
+    Returns:
+        Dashboard instance when enabled, else None.
+    """
+    if not constants.ENABLE_PROGRESS_UI:
+        return None
+    try:
+        from ui.progress_dashboard import PipelineProgressDashboard
+
+        return PipelineProgressDashboard(enabled=True)
+    except Exception as exc:  # noqa: BLE001
+        log_action(f"Progress dashboard is unavailable; continuing without UI: {exc}")
+        return None
+
+
+def _safe_dashboard_call(
+    dashboard: Optional[Any],
+    method_name: str,
+    *args: Any,
+) -> None:
+    """Invoke one dashboard method and suppress UI errors.
+
+    Args:
+        dashboard: Dashboard object or None.
+        method_name: Method to call.
+        args: Positional args for the dashboard method.
+    """
+    if dashboard is None:
+        return
+    try:
+        method = getattr(dashboard, method_name)
+        method(*args)
+    except Exception as exc:  # noqa: BLE001
+        log_action(f"Dashboard update failed for method '{method_name}': {exc}")
+
+
 def run_pipeline(
     dry_run: bool,
 ) -> None:
@@ -641,234 +697,305 @@ def run_pipeline(
     Args:
         dry_run: If true, skip real Printify product creation.
     """
-    prompts: Dict[str, str] = _load_prompts()
-    keywords: List[str] = read_keywords_from_ideas_csv(
-        constants.IDEAS_CSV_PATH, limit=constants.MAX_KEYWORDS_PER_RUN
-    )
-    color_to_ids: Dict[str, List[int]] = _load_color_to_ids_map(
-        constants.VARIANT_MAP_PATH
-    )
-
-    if not keywords:
-        message: str = "No ideas marked used=false found in ideas.csv"
-        log_action(message)
-        print(message)
-        return
-
-    gemini_key: str = _require_setting("GEMINI_API_KEY", constants.GEMINI_API_KEY_PATH)
-    background_removal_mode: str = constants.BACKGROUND_REMOVAL_MODE.strip().lower()
-    removebg_key: str = ""
-    if background_removal_mode == constants.BACKGROUND_REMOVAL_MODE_API:
-        removebg_key = _require_setting(
-            "REMOVEBG_API_KEY", constants.REMOVEBG_API_KEY_PATH
+    dashboard: Optional[Any] = _create_progress_dashboard()
+    _safe_dashboard_call(dashboard, "set_stage", "Loading prompts and input files")
+    try:
+        prompts: Dict[str, str] = _load_prompts()
+        keywords: List[str] = read_keywords_from_ideas_csv(
+            constants.IDEAS_CSV_PATH, limit=constants.MAX_KEYWORDS_PER_RUN
         )
-    printify_token: str = _require_setting(
-        "PRINTIFY_API_TOKEN", constants.PRINTIFY_API_TOKEN_PATH
-    )
-    printify_shop_id: str = _require_setting(
-        "PRINTIFY_SHOP_ID", constants.PRINTIFY_SHOP_ID_PATH
-    )
+        color_to_ids: Dict[str, List[int]] = _load_color_to_ids_map(
+            constants.VARIANT_MAP_PATH
+        )
 
-    gemini: GeminiClient = GeminiClient(
-        api_key=gemini_key,
-        text_model=constants.TEXT_MODEL,
-        image_model=constants.IMAGE_MODEL,
-        retries=constants.MAX_GEMINI_RETRIES,
-    )
-    remove_bg_client: RemoveBgClient = RemoveBgClient(
-        api_key=removebg_key,
-        endpoint=constants.REMOVE_BG_URL,
-        retries=constants.MAX_REMOVEBG_RETRIES,
-        removal_mode=background_removal_mode,
-    )
-    printify_client: PrintifyClient = PrintifyClient(
-        token=printify_token,
-        shop_id=printify_shop_id,
-        blueprint_id=constants.BLUEPRINT_ID,
-        print_provider_id=constants.PRINT_PROVIDER_ID,
-        size_order=constants.SIZE_ORDER,
-        size_surcharge_usd=constants.SIZE_SURCHARGE_USD,
-        print_x=constants.PRINT_POSITION_X,
-        print_y=constants.PRINT_POSITION_Y,
-        print_scale=constants.PRINT_SCALE,
-        min_price_usd=constants.MIN_PRICE_USD,
-        dry_run=dry_run,
-        retries=constants.MAX_PRINTIFY_RETRIES,
-    )
+        if not keywords:
+            message: str = "No ideas marked used=false found in ideas.csv"
+            log_action(message)
+            print(message)
+            return
 
-    for idx, keyword in enumerate(keywords):
-        log_action(f"Processing keyword ({idx}/{len(keywords)}): '{keyword}'")
-        successful_products_count: int = 0
-        try:
-            raw_ideas: List[Dict[str, Any]] = _generate_ideas_for_keyword(
-                gemini=gemini,
-                design_prompt=prompts["design"],
-                keyword=keyword,
-                ideas_per_keyword=constants.IDEAS_PER_KEYWORD,
-            )
-            filtered_ideas, filter_metadata = _filter_ideas_for_keyword(
-                gemini=gemini,
-                filter_prompt=prompts["filter_design_descriptions"],
-                keyword=keyword,
-                raw_ideas=raw_ideas,
-                filtered_ideas_per_keyword=constants.FILTERED_IDEAS_PER_KEYWORD,
-            )
-            write_json(
-                constants.PRODUCTS_DIR / f"{slugify_title(keyword)}_filtering.json",
-                filter_metadata,
-            )
-        except Exception as exc:  # noqa: BLE001
-            log_action(f"Failed to generate ideas for '{keyword}': {exc}")
-            continue
+        _safe_dashboard_call(dashboard, "set_total_ideas", 0)
+        _safe_dashboard_call(dashboard, "set_stage", "Initializing clients")
 
-        generated_designs: list[dict[str, Any]] = []
-        n_ideas: int = len(filtered_ideas)
-        loop_start_time: float = time.monotonic()
-        completed_iterations: int = 0
-        for idea_index, raw_idea in enumerate(filtered_ideas):
-            iteration_start_time: float = time.monotonic()
-            iteration_status: str = "success"
+        gemini_key: str = _require_setting(
+            "GEMINI_API_KEY", constants.GEMINI_API_KEY_PATH
+        )
+        background_removal_mode: str = constants.BACKGROUND_REMOVAL_MODE.strip().lower()
+        removebg_key: str = ""
+        if background_removal_mode == constants.BACKGROUND_REMOVAL_MODE_API:
+            removebg_key = _require_setting(
+                "REMOVEBG_API_KEY", constants.REMOVEBG_API_KEY_PATH
+            )
+        printify_token: str = _require_setting(
+            "PRINTIFY_API_TOKEN", constants.PRINTIFY_API_TOKEN_PATH
+        )
+        printify_shop_id: str = _require_setting(
+            "PRINTIFY_SHOP_ID", constants.PRINTIFY_SHOP_ID_PATH
+        )
+
+        gemini: GeminiClient = GeminiClient(
+            api_key=gemini_key,
+            text_model=constants.TEXT_MODEL,
+            image_model=constants.IMAGE_MODEL,
+            retries=constants.MAX_GEMINI_RETRIES,
+        )
+        remove_bg_client: RemoveBgClient = RemoveBgClient(
+            api_key=removebg_key,
+            endpoint=constants.REMOVE_BG_URL,
+            retries=constants.MAX_REMOVEBG_RETRIES,
+            removal_mode=background_removal_mode,
+        )
+        printify_client: PrintifyClient = PrintifyClient(
+            token=printify_token,
+            shop_id=printify_shop_id,
+            blueprint_id=constants.BLUEPRINT_ID,
+            print_provider_id=constants.PRINT_PROVIDER_ID,
+            size_order=constants.SIZE_ORDER,
+            size_surcharge_usd=constants.SIZE_SURCHARGE_USD,
+            print_x=constants.PRINT_POSITION_X,
+            print_y=constants.PRINT_POSITION_Y,
+            print_scale=constants.PRINT_SCALE,
+            min_price_usd=constants.MIN_PRICE_USD,
+            dry_run=dry_run,
+            retries=constants.MAX_PRINTIFY_RETRIES,
+        )
+
+        total_ideas_scheduled: int = 0
+        for idx, keyword in enumerate(keywords, start=1):
+            _safe_dashboard_call(dashboard, "set_keyword", keyword, idx, len(keywords))
+            _safe_dashboard_call(
+                dashboard,
+                "set_stage",
+                "Generating and filtering ideas",
+            )
+            log_action(f"Processing keyword ({idx}/{len(keywords)}): '{keyword}'")
+            successful_products_count: int = 0
             try:
-                log_action(f"Processing idea {idea_index}/{n_ideas}")
-                idea: Idea = _build_idea_object(raw_idea=raw_idea, keyword=keyword)
-                idea.folder_path.mkdir(parents=True, exist_ok=True)
-                _save_idea_json(idea)
-
-                design_path, design_bytes = _generate_design_image(
-                    idea=idea,
-                    prompts=prompts,
+                raw_ideas: List[Dict[str, Any]] = _generate_ideas_for_keyword(
                     gemini=gemini,
-                )
-
-                if "generated_designs" not in locals():
-                    generated_designs: list[dict[str, Any]] = []
-                generated_designs.append(
-                    {
-                        "review_index": len(generated_designs),
-                        "idea_index": idea_index,
-                        "idea": idea,
-                        "design_path": design_path,
-                        "design_bytes": design_bytes,
-                        "retry_count": 0,
-                    }
-                )
-
-            except Exception as exc:  # noqa: BLE001
-                iteration_status = f"failed: {exc}"
-                log_action(f"Failed processing idea for keyword '{keyword}': {exc}")
-                continue
-            finally:
-                completed_iterations += 1
-                elapsed_time_seconds: float = time.monotonic() - loop_start_time
-                average_iteration_seconds: float = (
-                    elapsed_time_seconds / completed_iterations
-                )
-                estimated_total_seconds: float = average_iteration_seconds * n_ideas
-                estimated_remaining_seconds: float = max(
-                    estimated_total_seconds - elapsed_time_seconds,
-                    0.0,
-                )
-                iteration_duration_seconds: float = (
-                    time.monotonic() - iteration_start_time
-                )
-                log_action(
-                    "Filtered-idea timing | "
-                    f"keyword='{keyword}' | "
-                    f"iteration={completed_iterations}/{n_ideas} | "
-                    f"status='{iteration_status}' | "
-                    f"iteration_seconds={iteration_duration_seconds:.1f} | "
-                    f"elapsed_seconds={elapsed_time_seconds:.1f} | "
-                    f"estimated_remaining_seconds={estimated_remaining_seconds:.1f} | "
-                    f"estimated_total_seconds={estimated_total_seconds:.1f}"
-                )
-
-        if not generated_designs:
-            log_action(f"No designs generated for keyword '{keyword}'")
-            continue
-
-        approved_designs: list[dict[str, Any]] = generated_designs
-        if constants.REVIEW_DESIGNS:
-            try:
-                approved_designs = _run_manual_design_review(
+                    design_prompt=prompts["design"],
                     keyword=keyword,
-                    design_entries=generated_designs,
-                    prompts=prompts,
+                    ideas_per_keyword=constants.IDEAS_PER_KEYWORD,
+                )
+                filtered_ideas, filter_metadata = _filter_ideas_for_keyword(
                     gemini=gemini,
-                    max_retries=constants.DESIGN_REVIEW_MAX_RETRIES,
+                    filter_prompt=prompts["filter_design_descriptions"],
+                    keyword=keyword,
+                    raw_ideas=raw_ideas,
+                    filtered_ideas_per_keyword=constants.FILTERED_IDEAS_PER_KEYWORD,
+                )
+                total_ideas_scheduled += len(filtered_ideas)
+                _safe_dashboard_call(
+                    dashboard,
+                    "set_total_ideas",
+                    total_ideas_scheduled,
+                )
+                write_json(
+                    constants.PRODUCTS_DIR / f"{slugify_title(keyword)}_filtering.json",
+                    filter_metadata,
                 )
             except Exception as exc:  # noqa: BLE001
-                log_action(f"Manual design review failed for '{keyword}': {exc}")
+                error_message: str = f"Failed to generate ideas for '{keyword}': {exc}"
+                log_action(error_message)
+                _safe_dashboard_call(dashboard, "add_error", error_message)
                 continue
 
-        for design_entry in approved_designs:
-            try:
-                idea: Idea = design_entry["idea"]
-                design_path: Path = design_entry["design_path"]
-                design_bytes: bytes = design_entry["design_bytes"]
-                transparent_path, _, mockup_cropped_path = _generate_post_design_assets(
-                    idea=idea,
-                    prompts=prompts,
-                    gemini=gemini,
-                    remove_bg_client=remove_bg_client,
-                    design_path=design_path,
-                    design_bytes=design_bytes,
-                )
+            generated_designs: list[dict[str, Any]] = []
+            n_ideas: int = len(filtered_ideas)
+            loop_start_time: float = time.monotonic()
+            completed_iterations: int = 0
+            for idea_index, raw_idea in enumerate(filtered_ideas):
+                iteration_start_time: float = time.monotonic()
+                iteration_status: str = "success"
+                try:
+                    _safe_dashboard_call(
+                        dashboard, "set_stage", "Generating raw design"
+                    )
+                    log_action(f"Processing idea {idea_index}/{n_ideas}")
+                    idea: Idea = _build_idea_object(raw_idea=raw_idea, keyword=keyword)
+                    _safe_dashboard_call(dashboard, "set_idea_name", idea.title)
+                    idea.folder_path.mkdir(parents=True, exist_ok=True)
+                    _save_idea_json(idea)
 
-                listing_title, description, tags = _generate_listing_fields(
-                    idea=idea,
-                    prompts=prompts,
-                    gemini=gemini,
-                )
-
-                selected_colors: List[str] = _select_colors(idea, color_to_ids)
-                sampled_price = printify_client.pick_base_price_usd(
-                    base_usd=constants.BASE_PRICE_USD,
-                    stdev_usd=constants.PRICE_STDEV_USD,
-                )
-                uploaded_image: Dict[str, Any] = printify_client.upload_image(
-                    transparent_path
-                )
-                uploaded_mockup: Dict[str, Any] = printify_client.upload_image(
-                    mockup_cropped_path
-                )
-                if uploaded_image or uploaded_mockup:
-                    write_json(
-                        idea.folder_path / "printify_upload.json",
-                        {
-                            "design_transparent_upload": uploaded_image,
-                            "default_mockup_upload": uploaded_mockup,
-                        },
+                    design_path, design_bytes = _generate_design_image(
+                        idea=idea,
+                        prompts=prompts,
+                        gemini=gemini,
+                        dashboard=dashboard,
                     )
 
-                payload: Dict[str, Any] = printify_client.build_payload(
-                    title=unique_versioned_title(listing_title, constants.PRODUCTS_DIR),
-                    description=description,
-                    tags=tags,
-                    selected_colors=selected_colors,
-                    color_to_ids=color_to_ids,
-                    design_transparent_path=transparent_path,
-                    uploaded_image_id=uploaded_image.get("id")
-                    if uploaded_image
-                    else None,
-                    base_price_usd=sampled_price,
-                )
-                write_json(idea.folder_path / "printify_payload.json", payload)
+                    generated_designs.append(
+                        {
+                            "review_index": len(generated_designs),
+                            "idea_index": idea_index,
+                            "idea": idea,
+                            "design_path": design_path,
+                            "design_bytes": design_bytes,
+                            "retry_count": 0,
+                        }
+                    )
 
-                result: Dict[str, Any] = printify_client.create_product(payload)
-                write_json(idea.folder_path / "printify_result.json", result)
-                successful_products_count += 1
-                log_action(f"Completed idea '{idea.title}'")
-            except Exception as exc:  # noqa: BLE001
-                log_action(f"Failed processing idea for keyword '{keyword}': {exc}")
+                except Exception as exc:  # noqa: BLE001
+                    iteration_status = f"failed: {exc}"
+                    error_message = (
+                        f"Failed processing idea for keyword '{keyword}': {exc}"
+                    )
+                    log_action(error_message)
+                    _safe_dashboard_call(dashboard, "add_error", error_message)
+                    _safe_dashboard_call(dashboard, "mark_idea_finished", False)
+                    continue
+                finally:
+                    completed_iterations += 1
+                    elapsed_time_seconds: float = time.monotonic() - loop_start_time
+                    average_iteration_seconds: float = (
+                        elapsed_time_seconds / completed_iterations
+                    )
+                    estimated_total_seconds: float = average_iteration_seconds * n_ideas
+                    estimated_remaining_seconds: float = max(
+                        estimated_total_seconds - elapsed_time_seconds,
+                        0.0,
+                    )
+                    iteration_duration_seconds: float = (
+                        time.monotonic() - iteration_start_time
+                    )
+                    log_action(
+                        "Filtered-idea timing | "
+                        f"keyword='{keyword}' | "
+                        f"iteration={completed_iterations}/{n_ideas} | "
+                        f"status='{iteration_status}' | "
+                        f"iteration_seconds={iteration_duration_seconds:.1f} | "
+                        f"elapsed_seconds={elapsed_time_seconds:.1f} | "
+                        f"estimated_remaining_seconds={estimated_remaining_seconds:.1f} | "
+                        f"estimated_total_seconds={estimated_total_seconds:.1f}"
+                    )
+
+            if not generated_designs:
+                log_action(f"No designs generated for keyword '{keyword}'")
                 continue
 
-        if successful_products_count > 0:
-            updated: bool = mark_idea_as_published(
-                path=constants.IDEAS_CSV_PATH,
-                keyword=keyword,
-                shirt_count=constants.IDEAS_PER_KEYWORD,
-            )
-            if not updated:
-                log_action(
-                    f"ideas.csv update skipped after publishing keyword '{keyword}'"
+            approved_designs: list[dict[str, Any]] = generated_designs
+            if constants.REVIEW_DESIGNS:
+                _safe_dashboard_call(dashboard, "set_stage", "Manual design review")
+                try:
+                    approved_designs = _run_manual_design_review(
+                        keyword=keyword,
+                        design_entries=generated_designs,
+                        prompts=prompts,
+                        gemini=gemini,
+                        max_retries=constants.DESIGN_REVIEW_MAX_RETRIES,
+                        dashboard=dashboard,
+                    )
+                    rejected_count: int = len(generated_designs) - len(approved_designs)
+                    for _ in range(max(0, rejected_count)):
+                        _safe_dashboard_call(dashboard, "mark_idea_finished", False)
+                except Exception as exc:  # noqa: BLE001
+                    error_message = (
+                        f"Manual design review failed for '{keyword}': {exc}"
+                    )
+                    log_action(error_message)
+                    _safe_dashboard_call(dashboard, "add_error", error_message)
+                    for _ in range(len(generated_designs)):
+                        _safe_dashboard_call(dashboard, "mark_idea_finished", False)
+                    continue
+
+            for design_entry in approved_designs:
+                try:
+                    idea: Idea = design_entry["idea"]
+                    design_path: Path = design_entry["design_path"]
+                    design_bytes: bytes = design_entry["design_bytes"]
+                    _safe_dashboard_call(dashboard, "set_idea_name", idea.title)
+                    _safe_dashboard_call(
+                        dashboard,
+                        "set_stage",
+                        "Generating transparent image and mockups",
+                    )
+                    transparent_path, _, mockup_cropped_path = (
+                        _generate_post_design_assets(
+                            idea=idea,
+                            prompts=prompts,
+                            gemini=gemini,
+                            remove_bg_client=remove_bg_client,
+                            design_path=design_path,
+                            design_bytes=design_bytes,
+                            dashboard=dashboard,
+                        )
+                    )
+
+                    _safe_dashboard_call(
+                        dashboard, "set_stage", "Generating listing text"
+                    )
+                    listing_title, description, tags = _generate_listing_fields(
+                        idea=idea,
+                        prompts=prompts,
+                        gemini=gemini,
+                    )
+
+                    _safe_dashboard_call(
+                        dashboard,
+                        "set_stage",
+                        "Uploading assets and creating product",
+                    )
+                    selected_colors: List[str] = _select_colors(idea, color_to_ids)
+                    sampled_price = printify_client.pick_base_price_usd(
+                        base_usd=constants.BASE_PRICE_USD,
+                        stdev_usd=constants.PRICE_STDEV_USD,
+                    )
+                    uploaded_image: Dict[str, Any] = printify_client.upload_image(
+                        transparent_path
+                    )
+                    uploaded_mockup: Dict[str, Any] = printify_client.upload_image(
+                        mockup_cropped_path
+                    )
+                    if uploaded_image or uploaded_mockup:
+                        write_json(
+                            idea.folder_path / "printify_upload.json",
+                            {
+                                "design_transparent_upload": uploaded_image,
+                                "default_mockup_upload": uploaded_mockup,
+                            },
+                        )
+
+                    payload: Dict[str, Any] = printify_client.build_payload(
+                        title=unique_versioned_title(
+                            listing_title, constants.PRODUCTS_DIR
+                        ),
+                        description=description,
+                        tags=tags,
+                        selected_colors=selected_colors,
+                        color_to_ids=color_to_ids,
+                        design_transparent_path=transparent_path,
+                        uploaded_image_id=uploaded_image.get("id")
+                        if uploaded_image
+                        else None,
+                        base_price_usd=sampled_price,
+                    )
+                    write_json(idea.folder_path / "printify_payload.json", payload)
+
+                    result: Dict[str, Any] = printify_client.create_product(payload)
+                    write_json(idea.folder_path / "printify_result.json", result)
+                    successful_products_count += 1
+                    _safe_dashboard_call(dashboard, "mark_idea_finished", True)
+                    log_action(f"Completed idea '{idea.title}'")
+                except Exception as exc:  # noqa: BLE001
+                    error_message = (
+                        f"Failed processing idea for keyword '{keyword}': {exc}"
+                    )
+                    log_action(error_message)
+                    _safe_dashboard_call(dashboard, "add_error", error_message)
+                    _safe_dashboard_call(dashboard, "mark_idea_finished", False)
+                    continue
+
+            if successful_products_count > 0:
+                updated: bool = mark_idea_as_published(
+                    path=constants.IDEAS_CSV_PATH,
+                    keyword=keyword,
+                    shirt_count=constants.IDEAS_PER_KEYWORD,
                 )
+                if not updated:
+                    log_action(
+                        f"ideas.csv update skipped after publishing keyword '{keyword}'"
+                    )
+    finally:
+        _safe_dashboard_call(dashboard, "set_stage", "Completed")
+        if dashboard is not None:
+            dashboard.close()

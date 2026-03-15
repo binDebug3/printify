@@ -39,6 +39,7 @@ BACKGROUND_REMOVAL_MODE_MANUAL: str = "manual"
 
 # Runtime behavior
 REVIEW_DESIGNS: bool = True
+ENABLE_PROGRESS_UI: bool = False
 IDEAS_PER_KEYWORD: int = 20
 FILTERED_IDEAS_PER_KEYWORD: int = 10
 FILTERED_DESIGNS_PER_KEYWORD: int = 5  # unused

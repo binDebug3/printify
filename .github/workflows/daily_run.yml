@@ -1,0 +1,48 @@
+name: Daily Auto-Publish
+
+# Runs every day at 10:00 AM MST (Mountain Standard Time = UTC-7).
+# Note: during MDT (Mountain Daylight Time, Mar–Nov) this fires at 11:00 AM local
+# time. Update to '0 16 * * *' in spring if you want 10 AM MDT instead.
+on:
+  schedule:
+    - cron: "0 17 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r src/schedule/auto_publish/requirements.txt
+
+      - name: Run publish script
+        env:
+          PRINTIFY_API_TOKEN: ${{ secrets.PRINTIFY_API_TOKEN }}
+          PRINTIFY_SHOP_ID: ${{ secrets.PRINTIFY_SHOP_ID }}
+        run: python src/schedule/auto_publish/publish.py
+
+      - name: Write run log to job summary
+        if: always()
+        run: |
+          echo "## Daily Auto-Publish Log" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          LOG_FILE="src/schedule/auto_publish/auto_publish.log"
+          if [ -f "$LOG_FILE" ]; then
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            cat "$LOG_FILE" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          else
+            echo "_No log file was generated (script may have failed to start)._" >> $GITHUB_STEP_SUMMARY
+          fi

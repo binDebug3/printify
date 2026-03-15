@@ -10,7 +10,7 @@ tests/artifacts/
 *.jpeg
 *.gif
 *.json
-*.csv
+# *.csv
 
 # C extensions
 *.so

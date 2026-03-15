@@ -35,47 +35,63 @@ Automation for two workflows:
 
 ```text
 data/
-    images/
+    base_mockups/
+    products/
     prompts/
+    ideas.csv
+    product_ids.txt
+    schedule.csv
+    variant_map.json
 meta/
 printify/
     src/
-        logger_config.py
         mass_production.py
-        notification.py
-        publish.py
-        tools.py
+        mass_production/
+            clients/
+                add_etsy_mockup.py
+                etsy_client.py
+                gemini_client.py
+                printify_client.py
+            photoshop/
+                design_crop.py
+                io_utils.py
+                remove_bg.py
+            ui/
+                design_review_ui.py
+                progress_dashboard.py
+                show_products.py
+            constants.py
+            models.py
+            pipeline.py
+            post_dry_run.py
         printify_api_tools/
             decide_bbox.py
             get_base_mockups.py
             get_product_info.py
             get_variant_info.py
             publish_product.py
-        mass_production/
-            add_etsy_mockup.py
-            constants.py
-            design_crop.py
-            design_review_ui.py
-            etsy_client.py
-            gemini_client.py
-            io_utils.py
-            models.py
-            pipeline.py
-            post_dry_run.py
-            printify_client.py
-            remove_bg.py
-            show_products.py
+        schedule/
+            logger_config.py
+            notification.py
+            publish.py
+            tools.py
+        tests/
+            manual/
     tests/
         __init__.py
         conftest.py
+        artifacts/
         manual/
             manual_background_visual.py
             manual_design_crop.py
+            manual_test_paste_design.py
+            manual_test_progress_ui.py
             manual_review_ui_runner.py
             manual_show_products_from_data_images.py
         test_add_etsy_mockup.py
         test_design_crop.py
         test_design_review_ui.py
+        test_get_base_mockups.py
         test_mass_production_cli.py
         test_mass_production_clients.py
         test_mass_production_io_utils.py

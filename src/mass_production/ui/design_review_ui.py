@@ -697,6 +697,30 @@ def review_generated_designs(
     state: dict[str, Any] = {"submitted": None, "closed_without_submit": False}
     submitted_event = threading.Event()
     closed_event = threading.Event()
+    server_shutdown_requested = threading.Event()
+
+    def _request_server_shutdown(
+        server: ThreadingHTTPServer,
+        delay_seconds: float,
+    ) -> None:
+        """Request server shutdown once, swallowing expected teardown races.
+
+        Args:
+            server: Review HTTP server instance.
+            delay_seconds: Delay before requesting shutdown.
+        """
+        if server_shutdown_requested.is_set():
+            return
+        server_shutdown_requested.set()
+
+        def _shutdown() -> None:
+            time.sleep(max(0.0, delay_seconds))
+            try:
+                server.shutdown()
+            except (OSError, RuntimeError) as exc:
+                log_action(f"Design review server shutdown skipped: {exc}")
+
+        threading.Thread(target=_shutdown, daemon=True).start()
 
     class DesignReviewHandler(BaseHTTPRequestHandler):
         """HTTP handler for the design review UI and JSON endpoints."""
@@ -790,12 +814,7 @@ def review_generated_designs(
             if self.path == "/api/closed":
                 state["closed_without_submit"] = True
                 closed_event.set()
-
-                def _shutdown_server_on_close() -> None:
-                    time.sleep(0.15)
-                    self.server.shutdown()
-
-                threading.Thread(target=_shutdown_server_on_close, daemon=True).start()
+                _request_server_shutdown(self.server, delay_seconds=0.15)
                 self.send_response(HTTPStatus.NO_CONTENT)
                 self.end_headers()
                 return
@@ -845,12 +864,7 @@ def review_generated_designs(
                     "message": "Review decisions submitted. Closing this tab...",
                 },
             )
-
-            def _shutdown_server() -> None:
-                time.sleep(1.2)
-                self.server.shutdown()
-
-            threading.Thread(target=_shutdown_server, daemon=True).start()
+            _request_server_shutdown(self.server, delay_seconds=1.2)
 
         def log_message(self, format: str, *args: Any) -> None:
             return
@@ -864,12 +878,22 @@ def review_generated_designs(
 
     server_thread = threading.Thread(target=server.serve_forever, daemon=True)
     server_thread.start()
-    while True:
-        if submitted_event.wait(timeout=0.2):
-            break
-        if closed_event.is_set():
-            break
-    server.server_close()
+    try:
+        while True:
+            if submitted_event.wait(timeout=0.2):
+                break
+            if closed_event.is_set():
+                break
+    except KeyboardInterrupt:
+        state["closed_without_submit"] = True
+        closed_event.set()
+        log_action(
+            f"Design review interrupted by user for keyword '{keyword}'; closing UI"
+        )
+    finally:
+        _request_server_shutdown(server, delay_seconds=0.0)
+        server_thread.join(timeout=3.0)
+        server.server_close()
 
     submitted = state.get("submitted")
     if state.get("closed_without_submit") and not isinstance(submitted, dict):

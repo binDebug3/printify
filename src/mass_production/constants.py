@@ -34,22 +34,23 @@ IMAGE_MODEL: str = "gemini-3.1-flash-image-preview"
 REMOVE_BG_URL: str = "https://api.remove.bg/v1.0/removebg"
 PRINTIFY_API_BASE_URL: str = "https://api.printify.com/v1"
 PRINTIFY_USER_AGENT: str = "printify-automation"
-BACKGROUND_REMOVAL_MODE_API: str = "api"
-BACKGROUND_REMOVAL_MODE_MANUAL: str = "manual"
+REMOVE_BG_API: str = "api"
+REMOVE_BG_MANUAL: str = "manual"
+
+# WORKFLOW SETTINGS
+REVIEW_DESIGNS: bool = True
+ENABLE_PROGRESS_UI: bool = True
+BACKGROUND_REMOVAL_MODE: str = REMOVE_BG_MANUAL
+IDEAS_PER_KEYWORD: int = 1
 
 # Runtime behavior
-REVIEW_DESIGNS: bool = True
-ENABLE_PROGRESS_UI: bool = False
-IDEAS_PER_KEYWORD: int = 20
-FILTERED_IDEAS_PER_KEYWORD: int = 10
-FILTERED_DESIGNS_PER_KEYWORD: int = 5  # unused
+FILTERED_IDEAS_PER_KEYWORD: int = 1
 DEFAULT_DRY_RUN: bool = False
 MAX_KEYWORDS_PER_RUN: int = 5
 MAX_GEMINI_RETRIES: int = 2
 MAX_REMOVEBG_RETRIES: int = 2
 MAX_PRINTIFY_RETRIES: int = 2
 DESIGN_REVIEW_MAX_RETRIES: int = 1
-BACKGROUND_REMOVAL_MODE: str = BACKGROUND_REMOVAL_MODE_MANUAL
 
 # Product settings
 BLUEPRINT_ID: int = 706

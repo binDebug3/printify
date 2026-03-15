@@ -28,6 +28,13 @@ import constants  # noqa: E402
 import pipeline as pipeline_module  # noqa: E402
 
 
+@pytest.fixture(autouse=True)
+def disable_progress_ui() -> None:
+    """Disable the optional Tk progress dashboard for automated tests."""
+    with patch.object(pipeline_module.constants, "ENABLE_PROGRESS_UI", False):
+        yield
+
+
 class TestRunPipeline:
     """Tests for run_pipeline."""
 
@@ -238,7 +245,7 @@ class TestRunPipeline:
             patch.object(
                 pipeline_module.constants,
                 "BACKGROUND_REMOVAL_MODE",
-                constants.BACKGROUND_REMOVAL_MODE_MANUAL,
+                constants.REMOVE_BG_MANUAL,
             ),
             patch.object(pipeline_module, "GeminiClient", return_value=MagicMock()),
             patch.object(pipeline_module, "RemoveBgClient", return_value=MagicMock()),
@@ -434,6 +441,75 @@ class TestNormalizeIdeaPayload:
 class TestGeneratePostDesignAssets:
     """Tests for post-design asset generation flow."""
 
+    def test_saves_personas_and_background_scene_from_json_response(
+        self,
+        tmp_path: Path,
+    ):
+        """Persists persona artifacts before mockup generation uses the mockup scene."""
+        idea_folder = tmp_path / "idea"
+        idea_folder.mkdir(parents=True, exist_ok=True)
+        design_path = idea_folder / "design.png"
+        design_path.write_bytes(b"design-bytes")
+
+        idea = Idea(
+            keyword="alpha",
+            original_title="Alpha Shirt",
+            title="Alpha Shirt 1",
+            folder_name="Alpha_Shirt_1",
+            folder_path=idea_folder,
+            payload={"mockup_color": "Light Blue"},
+        )
+        gemini = MagicMock()
+        gemini.generate_text.return_value = """{
+            \"buyer_persona_1\": \"Office jokester\",
+            \"buyer_persona_2\": \"Weekend griller\",
+            \"beneficiary_persona_1\": \"New dad\",
+            \"beneficiary_persona_2\": \"Retired pun champion\",
+            \"mockup_scene\": \"Sunlit porch with coffee mug\"
+        }"""
+        gemini.generate_image.return_value = b"mockup-final"
+        remove_bg_client = MagicMock()
+        remove_bg_client.remove_background.return_value = b"transparent"
+
+        default_mockup_path = idea_folder / "mockup_default_lightBlue.png"
+        default_mockup_path.write_bytes(b"default-mockup")
+
+        with (
+            patch.object(
+                pipeline_module,
+                "create_default_color_mockup",
+                return_value=default_mockup_path,
+            ),
+            patch.object(
+                pipeline_module,
+                "crop_center_percent",
+                return_value=None,
+            ),
+        ):
+            pipeline_module._generate_post_design_assets(
+                idea=idea,
+                prompts={"background": "bg", "mockup": "mk"},
+                gemini=gemini,
+                remove_bg_client=remove_bg_client,
+                design_path=design_path,
+                design_bytes=b"raw-design",
+            )
+
+        assert (idea_folder / "background.txt").read_text(encoding="utf-8") == (
+            "Sunlit porch with coffee mug"
+        )
+        assert (idea_folder / "buyer_personas.txt").read_text(encoding="utf-8") == (
+            "Buyer Persona 1:\nOffice jokester\n\nBuyer Persona 2:\nWeekend griller"
+        )
+        assert (idea_folder / "beneficiary_personas.txt").read_text(
+            encoding="utf-8"
+        ) == (
+            "Beneficiary Persona 1:\nNew dad\n\n"
+            "Beneficiary Persona 2:\nRetired pun champion"
+        )
+        mockup_prompt_arg = gemini.generate_image.call_args.args[0]
+        assert "Sunlit porch with coffee mug" in mockup_prompt_arg
+
     def test_uses_default_color_mockup_as_gemini_input(self, tmp_path: Path):
         """Conditions Gemini mockup generation with the pre-composed default mockup."""
         idea_folder = tmp_path / "idea"
@@ -517,3 +593,46 @@ class TestGeneratePostDesignAssets:
                 design_path=design_path,
                 design_bytes=b"raw-design",
             )
+
+
+class TestGenerateListingFields:
+    """Tests for listing field generation."""
+
+    def test_treats_description_response_as_plain_text(self, tmp_path: Path):
+        """Uses the description model output directly instead of parsing personas from it."""
+        idea_folder = tmp_path / "idea"
+        idea_folder.mkdir(parents=True, exist_ok=True)
+        idea = Idea(
+            keyword="alpha",
+            original_title="Alpha Shirt",
+            title="Alpha Shirt 1",
+            folder_name="Alpha_Shirt_1",
+            folder_path=idea_folder,
+            payload={"title": "Alpha Shirt 1"},
+        )
+        gemini = MagicMock()
+        gemini.generate_text.side_effect = [
+            "Listing Title",
+            "A clean listing description.",
+            "tag one, tag two, tag three",
+        ]
+
+        title, description, keywords = pipeline_module._generate_listing_fields(
+            idea=idea,
+            prompts={
+                "title": "title prompt",
+                "description": "description prompt",
+                "keywords": "keywords prompt",
+                "default_description": "Default details.",
+            },
+            gemini=gemini,
+        )
+
+        assert title == "Listing Title"
+        assert description == "A clean listing description.\n\nDefault details."
+        assert keywords == ["tag one", "tag two", "tag three"]
+        assert (idea_folder / "description.txt").read_text(encoding="utf-8") == (
+            "A clean listing description.\n\nDefault details."
+        )
+        assert not (idea_folder / "buyer_personas.txt").exists()
+        assert not (idea_folder / "beneficiary_personas.txt").exists()

@@ -123,6 +123,7 @@ def main() -> None:
     settings_to_confirm: dict[str, Any] = {
         "REVIEW_DESIGNS": constants.REVIEW_DESIGNS,
         "IDEAS_PER_KEYWORD": constants.IDEAS_PER_KEYWORD,
+        "ENABLE_PROGRESS_UI": constants.ENABLE_PROGRESS_UI,
         "FILTERED_IDEAS_PER_KEYWORD": constants.FILTERED_IDEAS_PER_KEYWORD,
         "BACKGROUND_REMOVAL_MODE": constants.BACKGROUND_REMOVAL_MODE,
         "dry run": args.dry_run,

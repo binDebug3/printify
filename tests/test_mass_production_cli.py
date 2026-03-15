@@ -43,6 +43,7 @@ class TestMain:
         fake_constants_module = SimpleNamespace(
             REVIEW_DESIGNS=False,
             IDEAS_PER_KEYWORD=20,
+            ENABLE_PROGRESS_UI=True,
             FILTERED_IDEAS_PER_KEYWORD=10,
             BACKGROUND_REMOVAL_MODE="manual",
         )
@@ -70,6 +71,7 @@ class TestMain:
             {
                 "REVIEW_DESIGNS": False,
                 "IDEAS_PER_KEYWORD": 20,
+                "ENABLE_PROGRESS_UI": True,
                 "FILTERED_IDEAS_PER_KEYWORD": 10,
                 "BACKGROUND_REMOVAL_MODE": "manual",
                 "dry run": False,
@@ -87,6 +89,7 @@ class TestMain:
         fake_constants_module = SimpleNamespace(
             REVIEW_DESIGNS=True,
             IDEAS_PER_KEYWORD=20,
+            ENABLE_PROGRESS_UI=True,
             FILTERED_IDEAS_PER_KEYWORD=10,
             BACKGROUND_REMOVAL_MODE="manual",
         )

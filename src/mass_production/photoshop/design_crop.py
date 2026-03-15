@@ -10,10 +10,34 @@ from typing import Optional
 
 from PIL import Image
 from schedule.logger_config import log_action
+from photoshop.io_utils import cut
 
 
 FOREGROUND_TOLERANCE: int = 10
-BASE_MOCKUPS_DIR: Path = Path(__file__).resolve().parents[3] / "data" / "base_mockups"
+
+
+def _resolve_base_mockups_dir() -> Path:
+    """Resolve the most likely data/base_mockups directory for this repository.
+
+    Returns:
+        Path to the base mockups directory.
+    """
+    module_path: Path = Path(__file__).resolve()
+    for parent in module_path.parents:
+        candidate: Path = parent / "data" / "base_mockups"
+        if candidate.exists():
+            log_action(f"Resolved base mockups directory to '{candidate}'")
+            return candidate
+
+    fallback_index: int = min(4, len(module_path.parents) - 1)
+    fallback: Path = module_path.parents[fallback_index] / "data" / "base_mockups"
+    log_action(
+        f"Base mockups directory not found on disk; using fallback path '{fallback}'"
+    )
+    return fallback
+
+
+BASE_MOCKUPS_DIR: Path = _resolve_base_mockups_dir()
 
 
 def crop_design_image_to_content(
@@ -245,7 +269,7 @@ def create_default_color_mockup(
         ValueError: If bbox JSON is invalid.
     """
     log_action(
-        f"Creating default mockup for color='{color}' from design='{design_path}'"
+        f"Creating default mockup for color='{color}' from design='{cut(design_path)}'"
     )
     if not design_path.exists():
         raise FileNotFoundError(f"Design image not found: '{design_path}'")
@@ -254,7 +278,7 @@ def create_default_color_mockup(
 
     mockup_dir_candidates = [
         BASE_MOCKUPS_DIR,
-        BASE_MOCKUPS_DIR.parent / "base_mockup",
+        BASE_MOCKUPS_DIR.parent / "base_mockups",
     ]
     mockup_path: Optional[Path] = None
     for candidate_dir in mockup_dir_candidates:
@@ -265,7 +289,7 @@ def create_default_color_mockup(
 
     if mockup_path is None:
         raise FileNotFoundError(
-            f"No base mockup found for color='{color}' as '{color_camel}.png'"
+            f"No base mockup found for color='{color}' in dir {mockup_dir_candidates}"
         )
 
     bbox_path = BASE_MOCKUPS_DIR / "bbox.json"
@@ -316,5 +340,5 @@ def create_default_color_mockup(
         mockup_rgba.paste(resized_design, (paste_x, paste_y), resized_design)
         mockup_rgba.save(output_path, format="PNG")
 
-    log_action(f"Saved color mockup to '{output_path}'")
+    log_action(f"Saved color mockup to '{cut(output_path)}'")
     return output_path

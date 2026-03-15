@@ -219,6 +219,18 @@ def _parse_filter_response_payload(response_text: str) -> dict[str, Any]:
     Returns:
         Parsed dictionary payload.
     """
+    return _parse_json_object_payload(response_text)
+
+
+def _parse_json_object_payload(response_text: str) -> dict[str, Any]:
+    """Parse a JSON object payload from model output text.
+
+    Args:
+        response_text: Raw Gemini output text.
+
+    Returns:
+        Parsed dictionary payload, or an empty dict when parsing fails.
+    """
     stripped: str = response_text.strip()
     try:
         parsed_direct: Any = json.loads(stripped)
@@ -237,6 +249,32 @@ def _parse_filter_response_payload(response_text: str) -> dict[str, Any]:
     except json.JSONDecodeError:
         return {}
     return {}
+
+
+def _write_persona_files(folder_path: Path, payload: dict[str, Any]) -> None:
+    """Write buyer and beneficiary persona text artifacts.
+
+    Args:
+        folder_path: Product output folder.
+        payload: Parsed model payload containing persona fields.
+    """
+    log_action(f"Writing persona files for '{cut(folder_path)}'")
+    buyer_persona_1: str = str(payload.get("buyer_persona_1", "")).strip()
+    buyer_persona_2: str = str(payload.get("buyer_persona_2", "")).strip()
+    beneficiary_persona_1: str = str(payload.get("beneficiary_persona_1", "")).strip()
+    beneficiary_persona_2: str = str(payload.get("beneficiary_persona_2", "")).strip()
+
+    buyer_personas_text: str = (
+        f"Buyer Persona 1:\n{buyer_persona_1}\n\nBuyer Persona 2:\n{buyer_persona_2}"
+    )
+    beneficiary_personas_text: str = (
+        "Beneficiary Persona 1:\n"
+        f"{beneficiary_persona_1}\n\n"
+        "Beneficiary Persona 2:\n"
+        f"{beneficiary_persona_2}"
+    )
+    write_text(folder_path / "buyer_personas.txt", buyer_personas_text)
+    write_text(folder_path / "beneficiary_personas.txt", beneficiary_personas_text)
 
 
 def _filter_ideas_for_keyword(
@@ -429,29 +467,21 @@ def _generate_post_design_assets(
         transparent_path,
     )
 
-    # mockup background
-    beneficiary_personas_path: Path = idea.folder_path / "beneficiary_personas.txt"
-    beneficiary_personas_text: str = ""
-    if beneficiary_personas_path.exists():
-        beneficiary_personas_text = read_text(beneficiary_personas_path).strip()
-    else:
-        log_action(
-            f"Beneficiary personas file not found for '{idea.title}': "
-            f"{cut(beneficiary_personas_path)}"
-        )
-
-    background_prompt: str = (
-        f"Design JSON:\n{idea_json}\n\n"
-        f"Beneficiary Personas:\n{beneficiary_personas_text}\n\n"
-        f"{prompts['background']}"
-    )
+    background_prompt: str = f"Design JSON:\n{idea_json}\n\n{prompts['background']}"
     log_action(f"Generating background text for '{idea.title}'")
-    background_text: str = gemini.generate_text(background_prompt).strip()
-    write_text(idea.folder_path / "background.txt", background_text)
+    background_response_text: str = gemini.generate_text(background_prompt).strip()
+    background_payload: dict[str, Any] = _parse_json_object_payload(
+        background_response_text
+    )
+    _write_persona_files(idea.folder_path, background_payload)
+    mockup_scene: str = str(
+        background_payload.get("mockup_scene", background_response_text)
+    ).strip()
+    write_text(idea.folder_path / "background.txt", mockup_scene)
 
-    # mock up
+    # mock up asdf
     default_mockup_path: Path = create_default_color_mockup(
-        design_path=design_path,
+        design_path=transparent_path,
         color=mockup_color,
         output_dir=idea.folder_path,
     )
@@ -462,8 +492,8 @@ def _generate_post_design_assets(
 
     shirt_color_mockup: str = mockup_color
     mockup_prompt: str = (
-        f"Make the t shirt color {shirt_color_mockup}"
-        f"Model description and background scene: {background_text}\n"
+        f"Make the t shirt color {shirt_color_mockup}\n"
+        f"Model description and background scene: {mockup_scene}\n"
         f"{prompts['mockup']}\n\n"
     )
     log_action(f"Generating mockup image for '{idea.title}'")
@@ -617,35 +647,7 @@ def _generate_listing_fields(
     # description and personas
     log_action(f"Generating description for '{idea.title}'")
     description_prompt: str = f"{prompts['description']}\n\nDesign JSON:\n{idea_json}"
-    generated_description_raw: str = gemini.generate_text(description_prompt).strip()
-
-    description_payload: dict[str, Any] = {}
-    try:
-        parsed_payload: Any = json.loads(generated_description_raw)
-        if isinstance(parsed_payload, dict):
-            description_payload = parsed_payload
-    except json.JSONDecodeError:
-        match = re.search(r"\{.*\}", generated_description_raw, re.DOTALL)
-        if match:
-            try:
-                parsed_payload = json.loads(match.group(0))
-                if isinstance(parsed_payload, dict):
-                    description_payload = parsed_payload
-            except json.JSONDecodeError:
-                description_payload = {}
-
-    buyer_persona_1: str = str(description_payload.get("buyer_persona_1", "")).strip()
-    buyer_persona_2: str = str(description_payload.get("buyer_persona_2", "")).strip()
-    beneficiary_persona_1: str = str(
-        description_payload.get("beneficiary_persona_1", "")
-    ).strip()
-    beneficiary_persona_2: str = str(
-        description_payload.get("beneficiary_persona_2", "")
-    ).strip()
-
-    generated_description: str = str(
-        description_payload.get("listing_description", generated_description_raw)
-    ).strip()
+    generated_description: str = gemini.generate_text(description_prompt).strip()
 
     full_description: str = (
         f"{generated_description}\n\n{prompts['default_description']}"
@@ -661,17 +663,6 @@ def _generate_listing_fields(
     )[: constants.KEYWORDS_COUNT]
 
     write_text(idea.folder_path / "title.txt", generated_title)
-    buyer_personas_text: str = (
-        f"Buyer Persona 1:\n{buyer_persona_1}\n\nBuyer Persona 2:\n{buyer_persona_2}"
-    )
-    beneficiary_personas_text: str = (
-        "Beneficiary Persona 1:\n"
-        f"{beneficiary_persona_1}\n\n"
-        "Beneficiary Persona 2:\n"
-        f"{beneficiary_persona_2}"
-    )
-    write_text(idea.folder_path / "buyer_personas.txt", buyer_personas_text)
-    write_text(idea.folder_path / "beneficiary_personas.txt", beneficiary_personas_text)
     write_text(idea.folder_path / "description.txt", full_description)
     write_text(idea.folder_path / "keywords.txt", json.dumps(keywords, indent=2))
 
@@ -744,6 +735,7 @@ def run_pipeline(
         dry_run: If true, skip real Printify product creation.
     """
     dashboard: Optional[Any] = _create_progress_dashboard()
+    interrupted: bool = False
     _safe_dashboard_call(dashboard, "set_stage", "Loading prompts and input files")
     try:
         prompts: Dict[str, str] = _load_prompts()
@@ -768,7 +760,7 @@ def run_pipeline(
         )
         background_removal_mode: str = constants.BACKGROUND_REMOVAL_MODE.strip().lower()
         removebg_key: str = ""
-        if background_removal_mode == constants.BACKGROUND_REMOVAL_MODE_API:
+        if background_removal_mode == constants.REMOVE_BG_API:
             removebg_key = _require_setting(
                 "REMOVEBG_API_KEY", constants.REMOVEBG_API_KEY_PATH
             )
@@ -1041,7 +1033,13 @@ def run_pipeline(
                     log_action(
                         f"ideas.csv update skipped after publishing keyword '{keyword}'"
                     )
+    except KeyboardInterrupt:
+        interrupted = True
+        message: str = "Pipeline interrupted by user (Ctrl+C)"
+        log_action(message)
+        _safe_dashboard_call(dashboard, "add_error", message)
     finally:
-        _safe_dashboard_call(dashboard, "set_stage", "Completed")
+        final_stage: str = "Interrupted" if interrupted else "Completed"
+        _safe_dashboard_call(dashboard, "set_stage", final_stage)
         if dashboard is not None:
             dashboard.close()

@@ -46,7 +46,7 @@ def write_text(path: Path, content: str) -> None:
         path: Destination file path.
         content: Text to write.
     """
-    log_action(f"Writing text to '{path}'")
+    log_action(f"Writing text to '{cut(path)}'")
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
 
@@ -297,8 +297,8 @@ def crop_center_percent(input_path: Path, output_path: Path, percent: float) -> 
         raise ValueError("percent must be > 0 and <= 1")
 
     log_action(
-        f"Center-cropping image '{input_path}' to 1:1, then keeping "
-        f"{percent * 100:.1f}% of the centered square into '{output_path}'"
+        f"Center-cropping image '{cut(input_path)}' to 1:1, then keeping "
+        f"{percent * 100:.1f}% of the centered square into '{cut(output_path)}'"
     )
     with Image.open(input_path) as image:
         width, height = image.size

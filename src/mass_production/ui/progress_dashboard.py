@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
 from schedule.logger_config import log_action
+from photoshop.io_utils import cut
 
 
 IMAGE_SLOT_LABELS: Dict[str, str] = {
@@ -56,7 +57,7 @@ class PipelineProgressDashboard:
         self._thread = threading.Thread(
             target=self._run_ui,
             name="pipeline-progress-ui",
-            daemon=True,
+            daemon=False,
         )
         self._thread.start()
         self._ui_ready.wait(timeout=3.0)
@@ -116,7 +117,7 @@ class PipelineProgressDashboard:
             image_path: Path to the generated image.
         """
         path: str = str(image_path)
-        log_action(f"Updating UI image slot '{image_slot}' with '{path}'")
+        log_action(f"Updating UI image slot '{cut(image_slot)}' with '{path}'")
         self._emit("image", {"slot": image_slot, "path": path})
 
     def add_error(self, message: str) -> None:
@@ -143,9 +144,11 @@ class PipelineProgressDashboard:
         log_action("Closing pipeline progress dashboard")
         if not self._enabled:
             return
+        if not self._is_running:
+            return
         self._emit("close", True)
         if self._thread is not None:
-            self._thread.join(timeout=2.0)
+            self._thread.join(timeout=8.0)
 
     def _emit(self, event_type: str, payload: Any) -> None:
         """Send an event to the UI thread when enabled.
@@ -196,10 +199,13 @@ class PipelineProgressDashboard:
 
         self._build_layout()
         self._ui_ready.set()
-        self._root.after(POLL_INTERVAL_MS, self._poll_events)
-        self._root.mainloop()
-        self._is_running = False
-        log_action("Tkinter UI thread finished")
+        try:
+            self._root.after(POLL_INTERVAL_MS, self._poll_events)
+            self._root.mainloop()
+        finally:
+            self._dispose_ui_objects()
+            self._is_running = False
+            log_action("Tkinter UI thread finished")
 
     def _build_layout(self) -> None:
         """Build all dashboard widgets."""
@@ -408,8 +414,54 @@ class PipelineProgressDashboard:
                 self._failed_ideas += 1
             return
         if event_type == "close":
-            self._root.after(0, self._root.destroy)
+            self._root.after(0, self._shutdown_ui)
             return
+
+    def _shutdown_ui(self) -> None:
+        """Stop the Tk main loop and destroy the root window safely."""
+        log_action("Stopping dashboard UI loop")
+        if not self._is_running:
+            return
+        self._is_running = False
+        try:
+            self._root.quit()
+        except Exception as exc:  # noqa: BLE001
+            log_action(f"Dashboard quit skipped: {exc}")
+        try:
+            self._root.destroy()
+        except Exception as exc:  # noqa: BLE001
+            log_action(f"Dashboard destroy skipped: {exc}")
+
+    def _dispose_ui_objects(self) -> None:
+        """Release Tk object references on the UI thread before thread exit."""
+        log_action("Disposing dashboard UI object references")
+
+        for attr_name in [
+            "_keyword_var",
+            "_idea_var",
+            "_stage_var",
+            "_eta_var",
+            "_summary_var",
+        ]:
+            setattr(self, attr_name, None)
+
+        for attr_name in ["_image_refs", "_image_labels", "_image_path_vars"]:
+            attr_value = getattr(self, attr_name, None)
+            if isinstance(attr_value, dict):
+                attr_value.clear()
+            setattr(self, attr_name, None)
+
+        for attr_name in ["_errors_listbox", "_progress", "_root"]:
+            setattr(self, attr_name, None)
+
+        for attr_name in [
+            "_tk",
+            "_ttk",
+            "_pil_image",
+            "_pil_image_ops",
+            "_pil_image_tk",
+        ]:
+            setattr(self, attr_name, None)
 
     def _update_image_slot(self, image_slot: str, image_path: str) -> None:
         """Render an image thumbnail in the selected image panel.
@@ -498,7 +550,7 @@ class PipelineProgressDashboard:
     def _on_window_close(self) -> None:
         """Handle user-initiated window close safely."""
         log_action("User closed the progress dashboard window")
-        self._root.destroy()
+        self._shutdown_ui()
 
 
 # End of module.

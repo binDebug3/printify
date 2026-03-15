@@ -44,6 +44,7 @@ class TestMain:
             REVIEW_DESIGNS=False,
             IDEAS_PER_KEYWORD=20,
             ENABLE_PROGRESS_UI=True,
+            SCHEDULE_NEW_PRODUCTS=False,
             FILTERED_IDEAS_PER_KEYWORD=10,
             BACKGROUND_REMOVAL_MODE="manual",
         )
@@ -72,6 +73,7 @@ class TestMain:
                 "REVIEW_DESIGNS": False,
                 "IDEAS_PER_KEYWORD": 20,
                 "ENABLE_PROGRESS_UI": True,
+                "SCHEDULE_NEW_PRODUCTS": False,
                 "FILTERED_IDEAS_PER_KEYWORD": 10,
                 "BACKGROUND_REMOVAL_MODE": "manual",
                 "dry run": False,
@@ -90,6 +92,7 @@ class TestMain:
             REVIEW_DESIGNS=True,
             IDEAS_PER_KEYWORD=20,
             ENABLE_PROGRESS_UI=True,
+            SCHEDULE_NEW_PRODUCTS=False,
             FILTERED_IDEAS_PER_KEYWORD=10,
             BACKGROUND_REMOVAL_MODE="manual",
         )

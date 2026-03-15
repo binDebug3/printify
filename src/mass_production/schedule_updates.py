@@ -22,13 +22,8 @@ DATE_FORMAT: str = "%m/%d/%Y"
 MIN_PUBLISH_OFFSET_DAYS: int = 4
 MAX_PUBLISH_OFFSET_DAYS: int = 40
 DATA_SCHEDULE_PATH: Path = constants.DATA_DIR / "schedule.csv"
-AUTO_PUBLISH_SCHEDULE_PATH: Path = (
-    constants.AUTOMATION_ROOT
-    / "printify"
-    / "src"
-    / "schedule"
-    / "auto_publish"
-    / "schedule.csv"
+AUTO_PUBLISH_SCHEDULE_PATH: Path = constants.AUTOMATION_ROOT.joinpath(
+    "printify", "src", "schedule", "auto_publish", "schedule.csv"
 )
 
 
@@ -135,6 +130,10 @@ def append_created_product_to_schedules(product_title: str, product_id: str) -> 
     Returns:
         True if a row was appended, otherwise False.
     """
+    if not constants.SCHEDULE_NEW_PRODUCTS:
+        log_action("Skipping schedule update because SCHEDULE_NEW_PRODUCTS is false")
+        return False
+
     normalized_title: str = str(product_title).strip()
     normalized_product_id: str = str(product_id).strip()
     if not normalized_title or not normalized_product_id:

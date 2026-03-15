@@ -95,6 +95,11 @@ class TestScheduleUpdates:
                 "choose_publish_date",
                 return_value="03/21/2026",
             ),
+            patch.object(
+                schedule_updates_module.constants,
+                "SCHEDULE_NEW_PRODUCTS",
+                True,
+            ),
         ):
             appended = schedule_updates_module.append_created_product_to_schedules(
                 product_title="Alpha Tee",
@@ -143,6 +148,11 @@ class TestScheduleUpdates:
             patch.object(
                 schedule_updates_module, "load_shop_id", return_value="shop-xyz"
             ),
+            patch.object(
+                schedule_updates_module.constants,
+                "SCHEDULE_NEW_PRODUCTS",
+                True,
+            ),
         ):
             appended = schedule_updates_module.append_created_product_to_schedules(
                 product_title="Alpha Tee",
@@ -157,4 +167,47 @@ class TestScheduleUpdates:
             auto_rows = list(csv.DictReader(file_handle))
 
         assert len(data_rows) == 1
+        assert auto_rows == []
+
+    def test_append_created_product_skips_when_scheduling_disabled(
+        self, tmp_path
+    ) -> None:
+        """Skips insertion when scheduling is disabled by constants flag."""
+        data_schedule = tmp_path / "data_schedule.csv"
+        auto_schedule = tmp_path / "auto_schedule.csv"
+        data_schedule.write_text(
+            "nick_name,product_id,shop_id,publish_status,publish_date\n",
+            encoding="utf-8",
+        )
+        auto_schedule.write_text(
+            "nick_name,product_id,shop_id,publish_status,publish_date\n",
+            encoding="utf-8",
+        )
+
+        with (
+            patch.object(schedule_updates_module, "DATA_SCHEDULE_PATH", data_schedule),
+            patch.object(
+                schedule_updates_module,
+                "AUTO_PUBLISH_SCHEDULE_PATH",
+                auto_schedule,
+            ),
+            patch.object(
+                schedule_updates_module.constants,
+                "SCHEDULE_NEW_PRODUCTS",
+                False,
+            ),
+        ):
+            appended = schedule_updates_module.append_created_product_to_schedules(
+                product_title="Alpha Tee",
+                product_id="prod-123",
+            )
+
+        assert appended is False
+
+        with open(data_schedule, "r", encoding="utf-8", newline="") as file_handle:
+            data_rows = list(csv.DictReader(file_handle))
+        with open(auto_schedule, "r", encoding="utf-8", newline="") as file_handle:
+            auto_rows = list(csv.DictReader(file_handle))
+
+        assert data_rows == []
         assert auto_rows == []

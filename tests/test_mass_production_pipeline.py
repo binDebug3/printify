@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from unittest.mock import MagicMock, patch
+import pytest
 
 MASS_PRODUCTION_ROOT = (
     Path(__file__).resolve().parent.parent / "src" / "mass_production"
@@ -412,3 +413,107 @@ class TestGenerateDesignImage:
         assert design_path == idea.folder_path / "design.png"
         assert design_path.read_bytes() == b"cropped-image"
         assert design_bytes == b"cropped-image"
+
+
+class TestNormalizeIdeaPayload:
+    """Tests for idea payload normalization."""
+
+    def test_preserves_mockup_color_field(self):
+        """Copies the new mockup_color field from raw Gemini payload."""
+        raw_payload = {
+            "title": "Alpha",
+            "mockup_color": "Light Blue",
+            "shirt_colors": ["pepper"],
+        }
+
+        normalized = pipeline_module._normalize_idea_payload(raw_payload, "alpha")
+
+        assert normalized["mockup_color"] == "Light Blue"
+
+
+class TestGeneratePostDesignAssets:
+    """Tests for post-design asset generation flow."""
+
+    def test_uses_default_color_mockup_as_gemini_input(self, tmp_path: Path):
+        """Conditions Gemini mockup generation with the pre-composed default mockup."""
+        idea_folder = tmp_path / "idea"
+        idea_folder.mkdir(parents=True, exist_ok=True)
+        design_path = idea_folder / "design.png"
+        design_path.write_bytes(b"design-bytes")
+
+        idea = Idea(
+            keyword="alpha",
+            original_title="Alpha Shirt",
+            title="Alpha Shirt 1",
+            folder_name="Alpha_Shirt_1",
+            folder_path=idea_folder,
+            payload={"mockup_color": "Light Blue"},
+        )
+        gemini = MagicMock()
+        gemini.generate_text.return_value = "Studio"
+        gemini.generate_image.return_value = b"mockup-final"
+        remove_bg_client = MagicMock()
+        remove_bg_client.remove_background.return_value = b"transparent"
+
+        default_mockup_path = idea_folder / "mockup_default_lightBlue.png"
+        default_mockup_path.write_bytes(b"default-mockup")
+
+        with (
+            patch.object(
+                pipeline_module,
+                "create_default_color_mockup",
+                return_value=default_mockup_path,
+            ) as mock_create_default,
+            patch.object(
+                pipeline_module,
+                "crop_center_percent",
+                return_value=None,
+            ),
+        ):
+            _, mockup_path, mockup_cropped_path = (
+                pipeline_module._generate_post_design_assets(
+                    idea=idea,
+                    prompts={"background": "bg", "mockup": "mk"},
+                    gemini=gemini,
+                    remove_bg_client=remove_bg_client,
+                    design_path=design_path,
+                    design_bytes=b"raw-design",
+                )
+            )
+
+        mock_create_default.assert_called_once_with(
+            design_path=design_path,
+            color="Light Blue",
+            output_dir=idea.folder_path,
+        )
+        assert mockup_path.exists()
+        assert mockup_cropped_path.name.endswith("_cropped.png")
+        gemini.generate_image.assert_called_once()
+        _, kwargs = gemini.generate_image.call_args
+        assert kwargs["image_bytes"] == b"default-mockup"
+
+    def test_raises_when_mockup_color_is_missing(self, tmp_path: Path):
+        """Fails fast when mockup_color is absent from the idea payload."""
+        idea_folder = tmp_path / "idea"
+        idea_folder.mkdir(parents=True, exist_ok=True)
+        design_path = idea_folder / "design.png"
+        design_path.write_bytes(b"design-bytes")
+
+        idea = Idea(
+            keyword="alpha",
+            original_title="Alpha Shirt",
+            title="Alpha Shirt 1",
+            folder_name="Alpha_Shirt_1",
+            folder_path=idea_folder,
+            payload={},
+        )
+
+        with pytest.raises(ValueError, match="mockup_color"):
+            pipeline_module._generate_post_design_assets(
+                idea=idea,
+                prompts={"background": "bg", "mockup": "mk"},
+                gemini=MagicMock(),
+                remove_bg_client=MagicMock(),
+                design_path=design_path,
+                design_bytes=b"raw-design",
+            )

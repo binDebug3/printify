@@ -1,6 +1,7 @@
 """Tests for automatic content-bounding-box cropping of generated designs."""
 
 import sys
+import json
 from io import BytesIO
 from pathlib import Path
 from typing import Optional
@@ -86,3 +87,93 @@ class TestCropDesignImageToContent:
 
         with Image.open(BytesIO(cropped_bytes)) as cropped_image:
             assert cropped_image.size == (44, 34)
+
+
+class TestCreateDefaultColorMockup:
+    """Tests for composing designs onto color base mockups using bbox.json."""
+
+    def test_creates_output_mockup_with_bbox_paste(self, tmp_path: Path):
+        """Pastes design into bbox and saves mockup_default_<color>.png output."""
+        base_mockups_dir = tmp_path / "data" / "base_mockups"
+        base_mockups_dir.mkdir(parents=True, exist_ok=True)
+        mockup_path = base_mockups_dir / "lightBlue.png"
+        design_path = tmp_path / "design.png"
+        output_dir = tmp_path / "out"
+
+        mockup = Image.new("RGBA", (10, 10), (255, 255, 255, 255))
+        mockup.save(mockup_path, format="PNG")
+
+        design = Image.new("RGBA", (2, 2), (255, 0, 0, 255))
+        design.save(design_path, format="PNG")
+
+        bbox_payload = {"bbox": {"x": 2, "y": 3, "width": 2, "height": 2}}
+        with open(base_mockups_dir / "bbox.json", "w", encoding="utf-8") as file_obj:
+            json.dump(bbox_payload, file_obj)
+
+        original_base = design_crop_module.BASE_MOCKUPS_DIR
+        design_crop_module.BASE_MOCKUPS_DIR = base_mockups_dir
+        try:
+            output_path = design_crop_module.create_default_color_mockup(
+                design_path=design_path,
+                color="Light Blue",
+                output_dir=output_dir,
+            )
+        finally:
+            design_crop_module.BASE_MOCKUPS_DIR = original_base
+
+        assert output_path.name == "mockup_default_lightBlue.png"
+        assert output_path.exists()
+
+        with Image.open(output_path) as result:
+            result_rgba = result.convert("RGBA")
+            pasted_pixel = result_rgba.getpixel((2, 3))
+            untouched_pixel = result_rgba.getpixel((0, 0))
+
+        assert pasted_pixel == (255, 0, 0, 255)
+        assert untouched_pixel == (255, 255, 255, 255)
+
+    def test_preserves_design_aspect_ratio_inside_bbox(self, tmp_path: Path):
+        """Scales proportionally so the design fits within bbox without stretching."""
+        base_mockups_dir = tmp_path / "data" / "base_mockups"
+        base_mockups_dir.mkdir(parents=True, exist_ok=True)
+        mockup_path = base_mockups_dir / "lightBlue.png"
+        design_path = tmp_path / "design.png"
+        output_dir = tmp_path / "out"
+
+        mockup = Image.new("RGBA", (8, 8), (255, 255, 255, 255))
+        mockup.save(mockup_path, format="PNG")
+
+        design = Image.new("RGBA", (4, 2), (255, 0, 0, 255))
+        design.save(design_path, format="PNG")
+
+        bbox_payload = {"bbox": {"x": 2, "y": 2, "width": 4, "height": 4}}
+        with open(base_mockups_dir / "bbox.json", "w", encoding="utf-8") as file_obj:
+            json.dump(bbox_payload, file_obj)
+
+        original_base = design_crop_module.BASE_MOCKUPS_DIR
+        design_crop_module.BASE_MOCKUPS_DIR = base_mockups_dir
+        try:
+            output_path = design_crop_module.create_default_color_mockup(
+                design_path=design_path,
+                color="Light Blue",
+                output_dir=output_dir,
+            )
+        finally:
+            design_crop_module.BASE_MOCKUPS_DIR = original_base
+
+        with Image.open(output_path) as result:
+            result_rgba = result.convert("RGBA")
+
+            # BBox top row should remain background because resized design is centered.
+            assert result_rgba.getpixel((2, 2)) == (255, 255, 255, 255)
+            assert result_rgba.getpixel((5, 2)) == (255, 255, 255, 255)
+
+            # Design fills full bbox width but only half height (4x2), preserving 2:1 ratio.
+            assert result_rgba.getpixel((2, 3)) == (255, 0, 0, 255)
+            assert result_rgba.getpixel((5, 3)) == (255, 0, 0, 255)
+            assert result_rgba.getpixel((2, 4)) == (255, 0, 0, 255)
+            assert result_rgba.getpixel((5, 4)) == (255, 0, 0, 255)
+
+            # BBox bottom row should remain background for the same reason.
+            assert result_rgba.getpixel((2, 5)) == (255, 255, 255, 255)
+            assert result_rgba.getpixel((5, 5)) == (255, 255, 255, 255)

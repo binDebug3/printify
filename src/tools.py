@@ -23,6 +23,7 @@ from logger_config import log_action
 COMFORT_COLORS_BLUEPRINT_ID: int = 706
 COMFORT_COLORS_PRINT_PROVIDER_ID: int = 99
 SUCCESS: int = 200
+DEFAULT_PRODUCTS_PAGE_SIZE: int = 50
 
 
 def load_api_token(filepath: Optional[str] = None) -> str:
@@ -115,17 +116,21 @@ def publish_product(
     }
 
     log_action(
-        f"sending publish request for " f"product_id='{product_id}' and shop_id='{shop_id}'"
+        f"sending publish request for product_id='{product_id}' and shop_id='{shop_id}'"
     )
 
     response = requests.post(publish_url, json=payload, headers=headers, timeout=10)
-    log_action(f"received status_code={response.status_code} " f"for product_id='{product_id}'")
+    log_action(
+        f"received status_code={response.status_code} for product_id='{product_id}'"
+    )
     return response
 
 
 def get_all_products(
     shop_id: Optional[str] = None,
     token: Optional[str] = None,
+    page: Optional[int] = None,
+    limit: Optional[int] = None,
 ) -> requests.Response:
     """
     Retrieves all products from a Printify shop.
@@ -137,6 +142,8 @@ def get_all_products(
     Args:
         shop_id (str): The unique identifier of the Printify shop.
         token (str): The API authentication token for Printify API access.
+        page (int, optional): Page number for paginated product retrieval.
+        limit (int, optional): Max product count to return for the requested page.
     Returns:
         requests.Response: The response object from the Printify API containing
             the list of products and status code.
@@ -153,14 +160,25 @@ def get_all_products(
 
     products_url = f"https://api.printify.com/v1/shops/{shop_id}/products.json"
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    params: Dict[str, int] = {}
+    if page is not None:
+        params["page"] = page
+    if limit is not None:
+        params["limit"] = limit
 
-    log_action(f"requesting products for shop_id='{shop_id}'")
+    log_action(
+        f"requesting products for shop_id='{shop_id}', page={page}, limit={limit}"
+    )
     try:
-        response = requests.get(products_url, headers=headers, timeout=10)
+        response = requests.get(
+            products_url, headers=headers, params=params or None, timeout=10
+        )
     except requests.exceptions.ReadTimeout as e:
-        log_action(f"request timed out for shop_id='{shop_id}'. It might not be a valid shop id")
+        log_action(
+            f"request timed out for shop_id='{shop_id}'. It might not be a valid shop id"
+        )
         raise e
-    log_action(f"received status_code={response.status_code} " f"for shop_id='{shop_id}'")
+    log_action(f"received status_code={response.status_code} for shop_id='{shop_id}'")
     return response
 
 
@@ -195,15 +213,41 @@ def get_all_product_ids(
         log_action("token missing, loading from file")
         token = load_api_token()
 
-    log_action("calling get all products")
-    response = get_all_products(shop_id, token)
+    log_action("calling get all products with pagination")
+    all_product_ids: List = []
+    page: int = 1
 
-    if response.status_code != SUCCESS:
-        log_action("failed to retrieve products, " f"status_code={response.status_code}")
-        raise ValueError(f"Failed to retrieve products: {response.status_code} - {response.text}")
+    while True:
+        response = get_all_products(
+            shop_id, token, page=page, limit=DEFAULT_PRODUCTS_PAGE_SIZE
+        )
 
-    products = response.json()
-    all_product_ids: List = [(product["title"], product["id"]) for product in products["data"]]
+        if response.status_code != SUCCESS:
+            log_action(
+                f"failed to retrieve products, status_code={response.status_code}"
+            )
+            raise ValueError(
+                f"Failed to retrieve products: {response.status_code} - {response.text}"
+            )
+
+        products = response.json()
+        page_items = products.get("data", [])
+        if not page_items:
+            break
+
+        all_product_ids.extend(
+            (product["title"], product["id"]) for product in page_items
+        )
+
+        current_page = products.get("current_page")
+        last_page = products.get("last_page")
+        if isinstance(current_page, int) and isinstance(last_page, int):
+            if current_page >= last_page:
+                break
+        elif len(page_items) < DEFAULT_PRODUCTS_PAGE_SIZE:
+            break
+
+        page += 1
 
     # save to output file
     log_action(f"writing {len(all_product_ids)} product ids to '{output_path}'")
@@ -211,22 +255,23 @@ def get_all_product_ids(
         for title, product_id in all_product_ids:
             f.write(f"{title},{product_id},{shop_id},\n")
 
-    print(f"Successfully retrieved and saved {len(all_product_ids)} products to '{output_path}'.")
+    print(
+        f"Successfully retrieved and saved {len(all_product_ids)} products to '{output_path}'."
+    )
     log_action(f"saved {len(all_product_ids)} product ids to '{output_path}'")
     return all_product_ids
 
 
 def parse_variant_ids(
-    data: Dict,
-    output_path: str
+    data: Dict, output_path: str
 ) -> Dict[str, List[Dict[str, object]]]:
     """
     Parse variant data into color entries with ordered variant IDs.
-    
+
     This function processes product variant data and groups variant IDs by color,
     preserving the API response order. The resulting payload is serialized as JSON
     with one top-level key: 'variants'.
-    
+
     Args:
         data (Dict): Product data containing 'variants' and 'options' keys.
             - 'variants' is a list of variant objects with 'id' and 'options' keys
@@ -257,8 +302,7 @@ def parse_variant_ids(
 
     payload: Dict[str, List[Dict[str, object]]] = {
         "variants": [
-            {"color": color, "ids": ids}
-            for color, ids in color_to_ids.items()
+            {"color": color, "ids": ids} for color, ids in color_to_ids.items()
         ]
     }
 
@@ -270,7 +314,7 @@ def parse_variant_ids(
         json.dump(payload, f, indent=4)
     log_action(f"saved variant map with {len(color_to_ids)} colors to '{output_path}'")
     return payload
-    
+
 
 def get_printify_variant_ids(
     output_path: str = "../data/variant_map.json",
@@ -303,7 +347,9 @@ def get_printify_variant_ids(
         ValueError: If the API response is invalid or missing expected data.
     """
     if print_provider_id is None:
-        log_action(f"print_provider_id missing, using default {COMFORT_COLORS_PRINT_PROVIDER_ID}")
+        log_action(
+            f"print_provider_id missing, using default {COMFORT_COLORS_PRINT_PROVIDER_ID}"
+        )
         print_provider_id = COMFORT_COLORS_PRINT_PROVIDER_ID
     if blueprint_id is None:
         log_action(f"blueprint_id missing, using default {COMFORT_COLORS_BLUEPRINT_ID}")
@@ -312,13 +358,17 @@ def get_printify_variant_ids(
         log_action("token missing, loading from file")
         token = load_api_token()
 
-    url = (f"https://api.printify.com/v1/catalog/blueprints/{blueprint_id}/"
-           f"print_providers/{print_provider_id}/variants.json")
+    url = (
+        f"https://api.printify.com/v1/catalog/blueprints/{blueprint_id}/"
+        f"print_providers/{print_provider_id}/variants.json"
+    )
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
 
     try:
-        log_action(f"requesting variants for blueprint_id='{blueprint_id}' and "
-                   f"print_provider_id='{print_provider_id}'")
+        log_action(
+            f"requesting variants for blueprint_id='{blueprint_id}' and "
+            f"print_provider_id='{print_provider_id}'"
+        )
         response = requests.get(url, headers=headers, timeout=10)
     except requests.exceptions.RequestException as e:
         log_action(f"request failed for blueprint_id='{blueprint_id}'")
@@ -326,25 +376,29 @@ def get_printify_variant_ids(
         raise e
 
     if response.status_code != SUCCESS:
-        err_msg: str = f"Failed to retrieve variants: {response.status_code} - {response.text}"
+        err_msg: str = (
+            f"Failed to retrieve variants: {response.status_code} - {response.text}"
+        )
         log_action(err_msg)
         raise ValueError(err_msg)
-    
-    data = response.json()    
+
+    data = response.json()
     log_action(f"data has keys: {list(data.keys())}")
-    log_action(f"received {len(data.get('variants', []))} for blueprint_id='{blueprint_id}'")
-    
+    log_action(
+        f"received {len(data.get('variants', []))} for blueprint_id='{blueprint_id}'"
+    )
+
     return parse_variant_ids(data, output_path)
 
 
 def parse_args() -> str | None:
     """
     Parse command-line arguments and return the function name to execute.
-    
-    This function sets up an argument parser that accepts a function name 
-    (either full or abbreviated) and returns the corresponding full function name. 
+
+    This function sets up an argument parser that accepts a function name
+    (either full or abbreviated) and returns the corresponding full function name.
     If an abbreviated name is provided, it maps it to the full function name.
-    
+
     Returns:
         str | None: The name of the function to execute. Returns one of:
             - "get_printify_variant_ids"

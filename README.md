@@ -170,10 +170,12 @@ Core flow:
 1. Read unused keywords from `data/ideas.csv`.
 2. Generate and filter ideas.
 3. Generate design images and optionally review/retry them.
-4. Create transparent art, mockups, and listing content.
-5. Build and optionally post Printify products.
-6. Save artifacts under `data/images/<folder_slug>/`.
-7. Mark matching ideas as published after successful posting.
+4. Create a default color mockup from `mockup_color` by placing the generated design on
+    the base shirt template.
+5. Create transparent art, final mockups, and listing content.
+6. Build and optionally post Printify products.
+7. Save artifacts under `data/images/<folder_slug>/`.
+8. Mark matching ideas as published after successful posting.
 
 Run only the manual design review UI with existing sample folders:
 

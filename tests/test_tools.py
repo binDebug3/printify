@@ -44,7 +44,9 @@ class TestLoadApiToken:
         with patch("builtins.open", mock_open(read_data="default-token")) as mock_file:
             result = load_api_token()
 
-        mock_file.assert_called_once_with("../meta/api_token.txt", "r", encoding="utf-8")
+        mock_file.assert_called_once_with(
+            "../meta/api_token.txt", "r", encoding="utf-8"
+        )
         assert result == "default-token"
 
     def test_raises_file_not_found_for_missing_file(self):
@@ -81,7 +83,8 @@ class TestPublishProduct:
             publish_product(PRODUCT_ID, shop_id=SHOP_ID, token=TOKEN)
 
         expected_url = (
-            f"https://api.printify.com/v1/shops/{SHOP_ID}" f"/products/{PRODUCT_ID}/publish.json"
+            f"https://api.printify.com/v1/shops/{SHOP_ID}"
+            f"/products/{PRODUCT_ID}/publish.json"
         )
         assert mock_post.call_args[0][0] == expected_url
 
@@ -124,9 +127,10 @@ class TestPublishProduct:
     def test_loads_shop_id_when_not_provided(self):
         """Calls load_shop_id when shop_id is None."""
         mock_resp = MagicMock(status_code=200)
-        with patch("src.tools.requests.post", return_value=mock_resp), patch(
-            "src.tools.load_shop_id", return_value=SHOP_ID
-        ) as mock_load:
+        with (
+            patch("src.tools.requests.post", return_value=mock_resp),
+            patch("src.tools.load_shop_id", return_value=SHOP_ID) as mock_load,
+        ):
             publish_product(PRODUCT_ID, token=TOKEN)
 
         mock_load.assert_called_once()
@@ -134,9 +138,10 @@ class TestPublishProduct:
     def test_loads_token_when_not_provided(self):
         """Calls load_api_token when token is None."""
         mock_resp = MagicMock(status_code=200)
-        with patch("src.tools.requests.post", return_value=mock_resp), patch(
-            "src.tools.load_api_token", return_value=TOKEN
-        ) as mock_load:
+        with (
+            patch("src.tools.requests.post", return_value=mock_resp),
+            patch("src.tools.load_api_token", return_value=TOKEN) as mock_load,
+        ):
             publish_product(PRODUCT_ID, shop_id=SHOP_ID)
 
         mock_load.assert_called_once()
@@ -164,16 +169,19 @@ class TestGetAllProducts:
 
     def test_re_raises_read_timeout(self):
         """Propagates ReadTimeout raised by requests.get."""
-        with patch("src.tools.requests.get", side_effect=requests.exceptions.ReadTimeout):
+        with patch(
+            "src.tools.requests.get", side_effect=requests.exceptions.ReadTimeout
+        ):
             with pytest.raises(requests.exceptions.ReadTimeout):
                 get_all_products(shop_id=SHOP_ID, token=TOKEN)
 
     def test_loads_shop_id_when_not_provided(self):
         """Calls load_shop_id when shop_id is None."""
         mock_resp = MagicMock(status_code=200)
-        with patch("src.tools.requests.get", return_value=mock_resp), patch(
-            "src.tools.load_shop_id", return_value=SHOP_ID
-        ) as mock_load:
+        with (
+            patch("src.tools.requests.get", return_value=mock_resp),
+            patch("src.tools.load_shop_id", return_value=SHOP_ID) as mock_load,
+        ):
             get_all_products(token=TOKEN)
 
         mock_load.assert_called_once()
@@ -181,9 +189,10 @@ class TestGetAllProducts:
     def test_loads_token_when_not_provided(self):
         """Calls load_api_token when token is None."""
         mock_resp = MagicMock(status_code=200)
-        with patch("src.tools.requests.get", return_value=mock_resp), patch(
-            "src.tools.load_api_token", return_value=TOKEN
-        ) as mock_load:
+        with (
+            patch("src.tools.requests.get", return_value=mock_resp),
+            patch("src.tools.load_api_token", return_value=TOKEN) as mock_load,
+        ):
             get_all_products(shop_id=SHOP_ID)
 
         mock_load.assert_called_once()
@@ -208,7 +217,9 @@ class TestGetAllProductIds:
         )
         output_file = str(tmp_path / "product_ids.txt")
         with patch("src.tools.get_all_products", return_value=mock_resp):
-            result = get_all_product_ids(output_path=output_file, shop_id=SHOP_ID, token=TOKEN)
+            result = get_all_product_ids(
+                output_path=output_file, shop_id=SHOP_ID, token=TOKEN
+            )
 
         assert result == [("Shirt A", "id-1"), ("Shirt B", "id-2")]
 
@@ -217,7 +228,9 @@ class TestGetAllProductIds:
         mock_resp = self._mock_response([{"title": "Shirt A", "id": "id-1"}])
         output_file = tmp_path / "product_ids.txt"
         with patch("src.tools.get_all_products", return_value=mock_resp):
-            get_all_product_ids(output_path=str(output_file), shop_id=SHOP_ID, token=TOKEN)
+            get_all_product_ids(
+                output_path=str(output_file), shop_id=SHOP_ID, token=TOKEN
+            )
 
         contents = output_file.read_text(encoding="utf-8")
         assert f"Shirt A,id-1,{SHOP_ID}," in contents
@@ -228,7 +241,32 @@ class TestGetAllProductIds:
         output_file = str(tmp_path / "product_ids.txt")
         with patch("src.tools.get_all_products", return_value=mock_resp):
             with pytest.raises(ValueError, match="404"):
-                get_all_product_ids(output_path=output_file, shop_id=SHOP_ID, token=TOKEN)
+                get_all_product_ids(
+                    output_path=output_file, shop_id=SHOP_ID, token=TOKEN
+                )
+
+    def test_fetches_multiple_pages_when_available(self, tmp_path):
+        """Continues fetching pages until the API reports the last page."""
+        first_page = MagicMock(status_code=200)
+        first_page.json.return_value = {
+            "current_page": 1,
+            "last_page": 2,
+            "data": [{"title": "Shirt A", "id": "id-1"}],
+        }
+        second_page = MagicMock(status_code=200)
+        second_page.json.return_value = {
+            "current_page": 2,
+            "last_page": 2,
+            "data": [{"title": "Shirt B", "id": "id-2"}],
+        }
+
+        output_file = str(tmp_path / "product_ids.txt")
+        with patch("src.tools.get_all_products", side_effect=[first_page, second_page]):
+            result = get_all_product_ids(
+                output_path=output_file, shop_id=SHOP_ID, token=TOKEN
+            )
+
+        assert result == [("Shirt A", "id-1"), ("Shirt B", "id-2")]
 
 
 class TestParseVariantIds:
@@ -283,9 +321,11 @@ class TestGetPrintifyVariantIds:
         response.json.return_value = {"variants": [{"id": 1, "options": {}}]}
         parsed_map = {"variants": [{"color": "Red", "ids": [1]}]}
 
-        with patch("src.tools.load_api_token", return_value=TOKEN), patch(
-            "src.tools.requests.get", return_value=response
-        ) as mock_get, patch("src.tools.parse_variant_ids", return_value=parsed_map) as mock_parse:
+        with (
+            patch("src.tools.load_api_token", return_value=TOKEN),
+            patch("src.tools.requests.get", return_value=response) as mock_get,
+            patch("src.tools.parse_variant_ids", return_value=parsed_map) as mock_parse,
+        ):
             result = get_printify_variant_ids(output_path=output_file)
 
         expected_url = (
@@ -362,9 +402,13 @@ class TestMain:
         """Executes the variant lookup branch selected by parse_args."""
         variant_map = {"Red": {"M": 101}}
 
-        with patch("src.tools.parse_args", return_value="get_printify_variant_ids"), patch(
-            "src.tools.get_printify_variant_ids", return_value=variant_map
-        ) as mock_get_variants, patch("src.tools.pprint") as mock_pprint:
+        with (
+            patch("src.tools.parse_args", return_value="get_printify_variant_ids"),
+            patch(
+                "src.tools.get_printify_variant_ids", return_value=variant_map
+            ) as mock_get_variants,
+            patch("src.tools.pprint") as mock_pprint,
+        ):
             main()
 
         mock_get_variants.assert_called_once_with()
@@ -372,9 +416,11 @@ class TestMain:
 
     def test_exits_with_status_one_on_error(self):
         """Exits with code 1 when the selected command raises an exception."""
-        with patch("src.tools.parse_args", return_value="get_all_products"), patch(
-            "src.tools.get_all_products", side_effect=RuntimeError("failure")
-        ), patch("src.tools.sys.exit", side_effect=SystemExit(1)) as mock_exit:
+        with (
+            patch("src.tools.parse_args", return_value="get_all_products"),
+            patch("src.tools.get_all_products", side_effect=RuntimeError("failure")),
+            patch("src.tools.sys.exit", side_effect=SystemExit(1)) as mock_exit,
+        ):
             with pytest.raises(SystemExit, match="1"):
                 main()
 

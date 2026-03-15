@@ -12,7 +12,7 @@ from typing import Any, List, Dict
 from logger_config import log_action
 
 import constants
-from design_crop import crop_design_image_to_content
+from design_crop import crop_design_image_to_content, create_default_color_mockup
 from design_review_ui import review_generated_designs
 from gemini_client import GeminiClient
 from io_utils import (
@@ -142,6 +142,7 @@ def _normalize_idea_payload(raw: dict[str, Any], keyword: str) -> dict[str, Any]
         "typography": str(raw.get("typography", "")).strip(),
         "composition": str(raw.get("composition", "")).strip(),
         "background": str(raw.get("background", "")).strip(),
+        "mockup_color": str(raw.get("mockup_color", "")).strip(),
         "design_colors": [
             str(c).strip() for c in raw.get("design_colors", []) if str(c).strip()
         ],
@@ -387,6 +388,7 @@ def _generate_post_design_assets(
     prompts: dict[str, str],
     gemini: GeminiClient,
     remove_bg_client: RemoveBgClient,
+    design_path: Path,
     design_bytes: bytes,
 ) -> tuple[Path, Path, Path]:
     """Create transparent design, mockup, and cropped mockup assets.
@@ -396,12 +398,18 @@ def _generate_post_design_assets(
         prompts: Prompt templates.
         gemini: Gemini client.
         remove_bg_client: remove.bg client.
+        design_path: Path to the generated design image.
         design_bytes: Generated design bytes.
 
     Returns:
         Tuple of paths: transparent, mockup, mockup_cropped.
     """
     idea_json: str = json.dumps(idea.payload, indent=2)
+    mockup_color: str = str(idea.payload.get("mockup_color", "")).strip()
+    if not mockup_color:
+        raise ValueError(
+            f"Missing required idea payload field 'mockup_color' for '{idea.title}'"
+        )
 
     # remove background
     log_action(f"Removing background from design for '{idea.title}'")
@@ -416,9 +424,14 @@ def _generate_post_design_assets(
     write_text(idea.folder_path / "background.txt", background_text)
 
     # mock up
-    shirt_color_mockup: str = idea.payload.get(
-        "shirt_colors", [constants.DEFAULT_SHIRT_COLOR]
-    )[0]
+    default_mockup_path: Path = create_default_color_mockup(
+        design_path=design_path,
+        color=mockup_color,
+        output_dir=idea.folder_path,
+    )
+    default_mockup_bytes: bytes = default_mockup_path.read_bytes()
+
+    shirt_color_mockup: str = mockup_color
     model_gender: str = "male"
     mockup_prompt: str = (
         f"Make the t shirt color {shirt_color_mockup}"
@@ -428,7 +441,8 @@ def _generate_post_design_assets(
     )
     log_action(f"Generating mockup image for '{idea.title}'")
     mockup_bytes: bytes = gemini.generate_image(
-        mockup_prompt, image_bytes=transparent_bytes
+        mockup_prompt,
+        image_bytes=default_mockup_bytes,
     )
     slugified_color: str = slugify_title(shirt_color_mockup)
     mockup_path: Path = idea.folder_path / f"mockup_({slugified_color}).png"
@@ -789,12 +803,14 @@ def run_pipeline(
         for design_entry in approved_designs:
             try:
                 idea: Idea = design_entry["idea"]
+                design_path: Path = design_entry["design_path"]
                 design_bytes: bytes = design_entry["design_bytes"]
                 transparent_path, _, mockup_cropped_path = _generate_post_design_assets(
                     idea=idea,
                     prompts=prompts,
                     gemini=gemini,
                     remove_bg_client=remove_bg_client,
+                    design_path=design_path,
                     design_bytes=design_bytes,
                 )
 

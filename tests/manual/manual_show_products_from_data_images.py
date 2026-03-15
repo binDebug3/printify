@@ -1,5 +1,5 @@
 # flake8: noqa: E501
-"""Manual-only viewer test that serves products from data/images in a browser UI.
+"""Manual-only viewer test that serves products from data/products in a browser UI.
 
 Run manually from the printify directory:
 python -m pytest tests/manual/manual_show_products_from_data_images.py::test_manual_show_products_from_data_images -s --no-header --no-summary 
@@ -33,7 +33,7 @@ from logger_config import log_action  # noqa: E402
 import show_products as show_products_module  # noqa: E402
 
 
-IMAGES_DIR: Path = WORKSPACE_ROOT / "data" / "images"
+IMAGES_DIR: Path = WORKSPACE_ROOT / "data" / "products"
 MAX_MISSING_FIELDS: int = 3
 REQUIRED_DETAIL_FIELDS: list[str] = [
     "mockup_image",
@@ -64,7 +64,7 @@ def _extract_keywords(folder_path: Path) -> list[str]:
     """Extract keywords from keywords.txt when available.
 
     Args:
-        folder_path: Product folder under data/images.
+        folder_path: Product folder under data/products.
 
     Returns:
         List of keyword strings.
@@ -89,7 +89,7 @@ def _extract_price(folder_path: Path) -> str:
     """Extract price text from printify_payload.json when available.
 
     Args:
-        folder_path: Product folder under data/images.
+        folder_path: Product folder under data/products.
 
     Returns:
         Price display string or "N/A".
@@ -126,7 +126,7 @@ def _resolve_mockup_image(folder_path: Path) -> Optional[Path]:
     """Resolve a preferred mockup image path for a product folder.
 
     Args:
-        folder_path: Product folder under data/images.
+        folder_path: Product folder under data/products.
 
     Returns:
         Path to chosen mockup image, or None when unavailable.
@@ -148,7 +148,7 @@ def _resolve_mockup_image(folder_path: Path) -> Optional[Path]:
 
 
 def _build_view_model_from_folder(folder_path: Path) -> Dict[str, Any]:
-    """Build a viewer item from one data/images folder.
+    """Build a viewer item from one data/products folder.
 
     Args:
         folder_path: Product folder path.
@@ -200,12 +200,12 @@ def _build_view_model_from_folder(folder_path: Path) -> Dict[str, Any]:
 
 
 def _collect_view_models_from_data_images() -> Tuple[List[Dict[str, Any]], List[str]]:
-    """Collect valid product view models from data/images folder structure.
+    """Collect valid product view models from data/products folder structure.
 
     Returns:
         Tuple of (included items, skipped folder messages).
     """
-    log_action("Collecting product items from data/images for manual viewer test")
+    log_action("Collecting product items from data/products for manual viewer test")
     included_items: List[Dict[str, Any]] = []
     skipped_messages: List[str] = []
 
@@ -232,7 +232,7 @@ def _make_local_request_handler(
     Returns:
         HTTP request handler class.
     """
-    log_action("Creating local request handler for manual data/images viewer")
+    log_action("Creating local request handler for manual data/products viewer")
     by_id: Dict[str, Dict[str, Any]] = {str(item["id"]): item for item in items}
 
     for item in items:
@@ -325,15 +325,15 @@ def _make_local_request_handler(
 
 
 def test_manual_show_products_from_data_images() -> None:
-    """Open a local viewer for products in data/images and allow manual inspection.
+    """Open a local viewer for products in data/products and allow manual inspection.
 
     This manual test includes all product folders unless data is missing beyond
     the configured threshold or a folder raises an exception while parsing.
     """
-    log_action("Starting manual data/images products viewer test")
+    log_action("Starting manual data/products products viewer test")
     items, skipped = _collect_view_models_from_data_images()
     if not items:
-        pytest.skip("No valid products found in data/images for manual viewer test")
+        pytest.skip("No valid products found in data/products for manual viewer test")
 
     print(f"Including {len(items)} products in viewer")
     if skipped:

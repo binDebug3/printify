@@ -1,4 +1,4 @@
-"""Standalone manual review UI runner using sample folders from ../data/images.
+"""Standalone manual review UI runner using sample folders from ../data/products.
 
 Run from the printify directory with:
 python tests/manual/manual_review_ui_runner.py
@@ -32,7 +32,7 @@ DEFAULT_SAMPLE_FOLDERS: List[str] = [
     "Minimalist_Dad_Shoes_1",
     "Vintage_Official_Seal_1",
 ]
-IMAGES_DIR: Path = WORKSPACE_ROOT / "data" / "images"
+IMAGES_DIR: Path = WORKSPACE_ROOT / "data" / "products"
 DEFAULT_KEYWORD: str = "manual-review-ui-sample"
 
 
@@ -50,7 +50,7 @@ def parse_args() -> argparse.Namespace:
         "--folders",
         nargs="+",
         default=DEFAULT_SAMPLE_FOLDERS,
-        help="Folder names under ../data/images to include in the review UI.",
+        help="Folder names under ../data/products to include in the review UI.",
     )
     parser.add_argument(
         "--keyword",
@@ -64,7 +64,7 @@ def _build_review_entry(folder_name: str, review_index: int) -> dict[str, Any]:
     """Build one design review payload entry from a generated image folder.
 
     Args:
-        folder_name: Folder under ../data/images.
+        folder_name: Folder under ../data/products.
         review_index: Stable numeric index used by the review UI.
 
     Returns:
@@ -95,7 +95,7 @@ def build_review_entries(folder_names: list[str]) -> list[dict[str, Any]]:
     """Build review payload entries from a list of sample folder names.
 
     Args:
-        folder_names: Folder names under ../data/images.
+        folder_names: Folder names under ../data/products.
 
     Returns:
         Review UI payload entries.

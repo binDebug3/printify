@@ -33,7 +33,7 @@ from design_crop import create_default_color_mockup  # noqa: E402
 DEFAULT_COLOR: str = "white"
 DEFAULT_OUTPUT_DIR: Path = PROJECT_ROOT / "tests" / "artifacts"
 DEFAULT_DESIGN_NAME: str = "design_transparent.png"
-IMAGES_DIR: Path = WORKSPACE_ROOT / "data" / "images"
+IMAGES_DIR: Path = WORKSPACE_ROOT / "data" / "products"
 
 
 def parse_args() -> argparse.Namespace:
@@ -53,7 +53,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--design-path",
         default=None,
-        help="Path to design image. Defaults to random data/images/**/design_transparent.png.",
+        help="Path to design image. Defaults to random data/products/**/design_transparent.png.",
     )
     parser.add_argument(
         "--color",
@@ -69,7 +69,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def find_random_design_path() -> Path:
-    """Pick one random design_transparent.png from data/images.
+    """Pick one random design_transparent.png from data/products.
 
     Returns:
         Selected design image path.
@@ -77,7 +77,7 @@ def find_random_design_path() -> Path:
     Raises:
         FileNotFoundError: If no design_transparent.png files are found.
     """
-    log_action("Selecting random design_transparent.png from data/images")
+    log_action("Selecting random design_transparent.png from data/products")
     candidates = sorted(IMAGES_DIR.rglob(DEFAULT_DESIGN_NAME))
     if not candidates:
         raise FileNotFoundError(

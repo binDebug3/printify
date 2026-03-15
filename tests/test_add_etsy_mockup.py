@@ -53,7 +53,7 @@ class TestResolveMockupPath:
         expected.write_bytes(b"png")
 
         result = etsy_mockup_module.resolve_mockup_path(
-            "Folder One", images_dir=tmp_path
+            "Folder One", products_dir=tmp_path
         )
 
         assert result == expected
@@ -143,7 +143,7 @@ class TestAddMockupsForPublishedProducts:
         ):
             result = etsy_mockup_module.add_mockups_for_published_products(
                 [{"product_id": "p1", "shop_id": "s1", "nick_name": "Folder One"}],
-                images_dir=tmp_path,
+                products_dir=tmp_path,
             )
 
         assert result == {"processed": 1, "updated": 1, "failed": 0}

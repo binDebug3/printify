@@ -259,25 +259,25 @@ def increment_or_append_title_number(title: str) -> str:
     return f"{base} {int(number) + 1}"
 
 
-def unique_versioned_title(title: str, images_dir: Path) -> str:
+def unique_versioned_title(title: str, products_dir: Path) -> str:
     """
     Produce a unique title based on numbering rules and folder collisions.
 
     Args:
         title: Input title from idea generation.
-        images_dir: Base output directory where folders are created.
+        products_dir: Base output directory where folders are created.
 
     Returns:
         Unique versioned title.
 
     """
-    log_action(f"Generating unique versioned title for '{title}' in '{cut(images_dir)}'")
+    log_action(f"Generating unique versioned title for '{title}' in '{cut(products_dir)}'")
     slug: str = slugify_title(title)
     candidate: str = title
 
-    if (images_dir / slug).exists():
+    if (products_dir / slug).exists():
         candidate = increment_or_append_title_number(title)
-        while (images_dir / slugify_title(candidate)).exists():
+        while (products_dir / slugify_title(candidate)).exists():
             candidate = increment_or_append_title_number(candidate)
     return candidate
 

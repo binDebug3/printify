@@ -29,7 +29,7 @@ Automation for two workflows:
   background removal, listing text generation, and Printify draft creation.
 - Optional browser review UI for keep/retry/reject before background removal.
 - Local product viewer UI for browsing posted products by tile and detail page.
-- Dry-run-friendly workflow with per-design artifacts in `data/images`.
+- Dry-run-friendly workflow with per-design artifacts in `data/products`.
 
 ## File Architecture
 
@@ -45,6 +45,12 @@ printify/
         notification.py
         publish.py
         tools.py
+        printify_api_tools/
+            decide_bbox.py
+            get_base_mockups.py
+            get_product_info.py
+            get_variant_info.py
+            publish_product.py
         mass_production/
             add_etsy_mockup.py
             constants.py
@@ -125,6 +131,16 @@ cd printify
 python src/publish.py
 ```
 
+Direct API helpers:
+
+```bash
+cd printify
+python src/printify_api_tools/publish_product.py <product_id>
+python src/printify_api_tools/get_product_info.py
+python src/printify_api_tools/get_product_info.py --list-ids
+python src/printify_api_tools/get_variant_info.py
+```
+
 What it does:
 
 1. Loads `data/schedule.csv` and selects rows due today.
@@ -174,7 +190,7 @@ Core flow:
     the base shirt template.
 5. Create transparent art, final mockups, and listing content.
 6. Build and optionally post Printify products.
-7. Save artifacts under `data/images/<folder_slug>/`.
+7. Save artifacts under `data/products/<folder_slug>/`.
 8. Mark matching ideas as published after successful posting.
 
 Run only the manual design review UI with existing sample folders:

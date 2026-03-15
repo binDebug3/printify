@@ -29,7 +29,7 @@ from logger_config import log_action  # noqa: E402
 import design_crop as design_crop_module  # noqa: E402
 
 
-IMAGES_DIR: Path = WORKSPACE_ROOT / "data" / "images"
+IMAGES_DIR: Path = WORKSPACE_ROOT / "data" / "products"
 DESIGN_IMAGE_NAME: str = "design.png"
 ARTIFACTS_DIR: Path = PROJECT_ROOT / "tests" / "artifacts"
 
@@ -38,7 +38,7 @@ def _find_design_images() -> list[Path]:
     """Return all design image paths available for manual crop validation.
 
     Returns:
-        Sorted paths to design.png files under data/images.
+        Sorted paths to design.png files under data/products.
     """
     log_action("Searching for generated design images for manual crop test")
     return sorted(IMAGES_DIR.rglob(DESIGN_IMAGE_NAME))
@@ -70,7 +70,7 @@ def _save_manual_crop_artifacts(
 def test_manual_crop_random_design_image() -> None:
     """Crop one random generated design image and validate basic crop invariants.
 
-    The test picks one design.png from data/images, runs crop_design_image_to_content,
+    The test picks one design.png from data/products, runs crop_design_image_to_content,
     then validates that the output dimensions remain valid and never exceed the
     original image bounds.
     """

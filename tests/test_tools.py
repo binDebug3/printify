@@ -1,26 +1,34 @@
-"""Tests for tools.py.
+"""Tests for shared and extracted Printify API modules."""
 
-Covers load_api_token, load_shop_id, publish_product, get_all_products,
-and get_all_product_ids without hitting the filesystem or the Printify API.
-"""
+import argparse
 
 from unittest.mock import patch, MagicMock, mock_open
 import sys
 import pytest
 import requests
 
-from src.tools import (
-    load_api_token,
-    load_shop_id,
-    publish_product,
-    get_all_products,
+from src.printify_api_tools.get_product_info import (
     get_all_product_ids,
-    parse_variant_ids,
+    get_all_products,
+    main as product_info_main,
+    parse_args as product_info_parse_args,
+)
+from src.printify_api_tools.get_variant_info import (
     get_printify_variant_ids,
-    parse_args,
-    main,
+    main as variant_info_main,
+    parse_args as variant_info_parse_args,
+    parse_variant_ids,
+)
+from src.printify_api_tools.publish_product import (
+    main as publish_product_main,
+    parse_args as publish_product_parse_args,
+    publish_product,
+)
+from src.tools import (
     COMFORT_COLORS_BLUEPRINT_ID,
     COMFORT_COLORS_PRINT_PROVIDER_ID,
+    load_api_token,
+    load_shop_id,
 )
 
 
@@ -79,7 +87,10 @@ class TestPublishProduct:
     def test_posts_to_correct_endpoint(self):
         """Sends a POST request to the Printify publish URL for the given product."""
         mock_resp = MagicMock(status_code=200)
-        with patch("src.tools.requests.post", return_value=mock_resp) as mock_post:
+        with patch(
+            "src.printify_api_tools.publish_product.requests.post",
+            return_value=mock_resp,
+        ) as mock_post:
             publish_product(PRODUCT_ID, shop_id=SHOP_ID, token=TOKEN)
 
         expected_url = (
@@ -91,7 +102,10 @@ class TestPublishProduct:
     def test_bearer_token_in_auth_header(self):
         """Authorization header contains the correct Bearer token."""
         mock_resp = MagicMock(status_code=200)
-        with patch("src.tools.requests.post", return_value=mock_resp) as mock_post:
+        with patch(
+            "src.printify_api_tools.publish_product.requests.post",
+            return_value=mock_resp,
+        ) as mock_post:
             publish_product(PRODUCT_ID, shop_id=SHOP_ID, token=TOKEN)
 
         headers = mock_post.call_args[1]["headers"]
@@ -100,7 +114,10 @@ class TestPublishProduct:
     def test_payload_contains_all_sync_flags(self):
         """All expected sync fields are present and set to True in the POST payload."""
         mock_resp = MagicMock(status_code=200)
-        with patch("src.tools.requests.post", return_value=mock_resp) as mock_post:
+        with patch(
+            "src.printify_api_tools.publish_product.requests.post",
+            return_value=mock_resp,
+        ) as mock_post:
             publish_product(PRODUCT_ID, shop_id=SHOP_ID, token=TOKEN)
 
         payload = mock_post.call_args[1]["json"]
@@ -119,7 +136,10 @@ class TestPublishProduct:
     def test_returns_response_object(self):
         """Returns the response object from requests.post."""
         mock_resp = MagicMock(status_code=200)
-        with patch("src.tools.requests.post", return_value=mock_resp):
+        with patch(
+            "src.printify_api_tools.publish_product.requests.post",
+            return_value=mock_resp,
+        ):
             result = publish_product(PRODUCT_ID, shop_id=SHOP_ID, token=TOKEN)
 
         assert result is mock_resp
@@ -128,8 +148,14 @@ class TestPublishProduct:
         """Calls load_shop_id when shop_id is None."""
         mock_resp = MagicMock(status_code=200)
         with (
-            patch("src.tools.requests.post", return_value=mock_resp),
-            patch("src.tools.load_shop_id", return_value=SHOP_ID) as mock_load,
+            patch(
+                "src.printify_api_tools.publish_product.requests.post",
+                return_value=mock_resp,
+            ),
+            patch(
+                "src.printify_api_tools.publish_product.load_shop_id",
+                return_value=SHOP_ID,
+            ) as mock_load,
         ):
             publish_product(PRODUCT_ID, token=TOKEN)
 
@@ -139,8 +165,14 @@ class TestPublishProduct:
         """Calls load_api_token when token is None."""
         mock_resp = MagicMock(status_code=200)
         with (
-            patch("src.tools.requests.post", return_value=mock_resp),
-            patch("src.tools.load_api_token", return_value=TOKEN) as mock_load,
+            patch(
+                "src.printify_api_tools.publish_product.requests.post",
+                return_value=mock_resp,
+            ),
+            patch(
+                "src.printify_api_tools.publish_product.load_api_token",
+                return_value=TOKEN,
+            ) as mock_load,
         ):
             publish_product(PRODUCT_ID, shop_id=SHOP_ID)
 
@@ -153,7 +185,10 @@ class TestGetAllProducts:
     def test_gets_from_correct_endpoint(self):
         """Sends a GET request to the Printify products URL for the given shop."""
         mock_resp = MagicMock(status_code=200)
-        with patch("src.tools.requests.get", return_value=mock_resp) as mock_get:
+        with patch(
+            "src.printify_api_tools.get_product_info.requests.get",
+            return_value=mock_resp,
+        ) as mock_get:
             get_all_products(shop_id=SHOP_ID, token=TOKEN)
 
         expected_url = f"https://api.printify.com/v1/shops/{SHOP_ID}/products.json"
@@ -162,7 +197,10 @@ class TestGetAllProducts:
     def test_returns_response_object(self):
         """Returns the response object from requests.get."""
         mock_resp = MagicMock(status_code=200)
-        with patch("src.tools.requests.get", return_value=mock_resp):
+        with patch(
+            "src.printify_api_tools.get_product_info.requests.get",
+            return_value=mock_resp,
+        ):
             result = get_all_products(shop_id=SHOP_ID, token=TOKEN)
 
         assert result is mock_resp
@@ -170,7 +208,8 @@ class TestGetAllProducts:
     def test_re_raises_read_timeout(self):
         """Propagates ReadTimeout raised by requests.get."""
         with patch(
-            "src.tools.requests.get", side_effect=requests.exceptions.ReadTimeout
+            "src.printify_api_tools.get_product_info.requests.get",
+            side_effect=requests.exceptions.ReadTimeout,
         ):
             with pytest.raises(requests.exceptions.ReadTimeout):
                 get_all_products(shop_id=SHOP_ID, token=TOKEN)
@@ -179,8 +218,14 @@ class TestGetAllProducts:
         """Calls load_shop_id when shop_id is None."""
         mock_resp = MagicMock(status_code=200)
         with (
-            patch("src.tools.requests.get", return_value=mock_resp),
-            patch("src.tools.load_shop_id", return_value=SHOP_ID) as mock_load,
+            patch(
+                "src.printify_api_tools.get_product_info.requests.get",
+                return_value=mock_resp,
+            ),
+            patch(
+                "src.printify_api_tools.get_product_info.load_shop_id",
+                return_value=SHOP_ID,
+            ) as mock_load,
         ):
             get_all_products(token=TOKEN)
 
@@ -190,8 +235,14 @@ class TestGetAllProducts:
         """Calls load_api_token when token is None."""
         mock_resp = MagicMock(status_code=200)
         with (
-            patch("src.tools.requests.get", return_value=mock_resp),
-            patch("src.tools.load_api_token", return_value=TOKEN) as mock_load,
+            patch(
+                "src.printify_api_tools.get_product_info.requests.get",
+                return_value=mock_resp,
+            ),
+            patch(
+                "src.printify_api_tools.get_product_info.load_api_token",
+                return_value=TOKEN,
+            ) as mock_load,
         ):
             get_all_products(shop_id=SHOP_ID)
 
@@ -216,7 +267,10 @@ class TestGetAllProductIds:
             ]
         )
         output_file = str(tmp_path / "product_ids.txt")
-        with patch("src.tools.get_all_products", return_value=mock_resp):
+        with patch(
+            "src.printify_api_tools.get_product_info.get_all_products",
+            return_value=mock_resp,
+        ):
             result = get_all_product_ids(
                 output_path=output_file, shop_id=SHOP_ID, token=TOKEN
             )
@@ -227,7 +281,10 @@ class TestGetAllProductIds:
         """Writes one CSV-formatted line per product to the output file."""
         mock_resp = self._mock_response([{"title": "Shirt A", "id": "id-1"}])
         output_file = tmp_path / "product_ids.txt"
-        with patch("src.tools.get_all_products", return_value=mock_resp):
+        with patch(
+            "src.printify_api_tools.get_product_info.get_all_products",
+            return_value=mock_resp,
+        ):
             get_all_product_ids(
                 output_path=str(output_file), shop_id=SHOP_ID, token=TOKEN
             )
@@ -239,7 +296,10 @@ class TestGetAllProductIds:
         """Raises ValueError when the API returns a non-200 status code."""
         mock_resp = MagicMock(status_code=404, text="Not Found")
         output_file = str(tmp_path / "product_ids.txt")
-        with patch("src.tools.get_all_products", return_value=mock_resp):
+        with patch(
+            "src.printify_api_tools.get_product_info.get_all_products",
+            return_value=mock_resp,
+        ):
             with pytest.raises(ValueError, match="404"):
                 get_all_product_ids(
                     output_path=output_file, shop_id=SHOP_ID, token=TOKEN
@@ -261,7 +321,10 @@ class TestGetAllProductIds:
         }
 
         output_file = str(tmp_path / "product_ids.txt")
-        with patch("src.tools.get_all_products", side_effect=[first_page, second_page]):
+        with patch(
+            "src.printify_api_tools.get_product_info.get_all_products",
+            side_effect=[first_page, second_page],
+        ):
             result = get_all_product_ids(
                 output_path=output_file, shop_id=SHOP_ID, token=TOKEN
             )
@@ -322,9 +385,18 @@ class TestGetPrintifyVariantIds:
         parsed_map = {"variants": [{"color": "Red", "ids": [1]}]}
 
         with (
-            patch("src.tools.load_api_token", return_value=TOKEN),
-            patch("src.tools.requests.get", return_value=response) as mock_get,
-            patch("src.tools.parse_variant_ids", return_value=parsed_map) as mock_parse,
+            patch(
+                "src.printify_api_tools.get_variant_info.load_api_token",
+                return_value=TOKEN,
+            ),
+            patch(
+                "src.printify_api_tools.get_variant_info.requests.get",
+                return_value=response,
+            ) as mock_get,
+            patch(
+                "src.printify_api_tools.get_variant_info.parse_variant_ids",
+                return_value=parsed_map,
+            ) as mock_parse,
         ):
             result = get_printify_variant_ids(output_path=output_file)
 
@@ -343,7 +415,10 @@ class TestGetPrintifyVariantIds:
         output_file = str(tmp_path / "variant_map.json")
         response = MagicMock(status_code=500, text="server error")
 
-        with patch("src.tools.requests.get", return_value=response):
+        with patch(
+            "src.printify_api_tools.get_variant_info.requests.get",
+            return_value=response,
+        ):
             with pytest.raises(ValueError, match="Failed to retrieve variants: 500"):
                 get_printify_variant_ids(
                     output_path=output_file,
@@ -357,7 +432,7 @@ class TestGetPrintifyVariantIds:
         output_file = str(tmp_path / "variant_map.json")
 
         with patch(
-            "src.tools.requests.get",
+            "src.printify_api_tools.get_variant_info.requests.get",
             side_effect=requests.exceptions.RequestException("boom"),
         ):
             with pytest.raises(requests.exceptions.RequestException, match="boom"):
@@ -369,59 +444,121 @@ class TestGetPrintifyVariantIds:
                 )
 
 
-class TestParseArgs:
-    """Tests for parse_args."""
+class TestCliParseArgs:
+    """Tests for CLI argument parsing in extracted modules."""
 
-    def test_defaults_to_variant_lookup(self):
-        """Returns get_printify_variant_ids when no CLI function is provided."""
-        with patch.object(sys, "argv", ["tools.py"]):
-            assert parse_args() == "get_printify_variant_ids"
+    def test_publish_product_parse_args_reads_product_id(self):
+        """Parses the required product id argument for the publish CLI."""
+        with patch.object(sys, "argv", ["publish_product.py", PRODUCT_ID]):
+            args = publish_product_parse_args()
 
-    def test_maps_short_aliases_to_full_function_names(self):
-        """Translates supported short CLI aliases into full function names."""
-        with patch.object(sys, "argv", ["tools.py", "gpvi"]):
-            assert parse_args() == "get_printify_variant_ids"
+        assert args.product_id == PRODUCT_ID
+        assert args.shop_id is None
 
-        with patch.object(sys, "argv", ["tools.py", "gapi"]):
-            assert parse_args() == "get_all_product_ids"
+    def test_product_info_parse_args_defaults_to_raw_products(self):
+        """Leaves list_ids disabled when no flag is provided."""
+        with patch.object(sys, "argv", ["get_product_info.py"]):
+            args = product_info_parse_args()
 
-        with patch.object(sys, "argv", ["tools.py", "gap"]):
-            assert parse_args() == "get_all_products"
+        assert args.list_ids is False
+        assert args.output_path == "../data/product_ids.txt"
 
-    def test_invalid_function_raises_system_exit(self):
-        """Lets argparse reject unsupported function names."""
-        with patch.object(sys, "argv", ["tools.py", "bad"]):
-            with pytest.raises(SystemExit):
-                parse_args()
+    def test_variant_info_parse_args_uses_defaults(self):
+        """Uses the default variant output path when no flags are provided."""
+        with patch.object(sys, "argv", ["get_variant_info.py"]):
+            args = variant_info_parse_args()
+
+        assert args.output_path == "../data/variant_map.json"
+        assert args.print_provider_id is None
 
 
-class TestMain:
-    """Tests for main."""
+class TestCliMain:
+    """Tests for CLI entry points in extracted modules."""
 
-    def test_dispatches_variant_lookup_and_prints_result(self):
-        """Executes the variant lookup branch selected by parse_args."""
-        variant_map = {"Red": {"M": 101}}
+    def test_variant_main_prints_lookup_result(self):
+        """Executes the variant lookup CLI and pretty-prints the result."""
+        args = argparse.Namespace(
+            output_path="../data/variant_map.json",
+            print_provider_id=None,
+            blueprint_id=None,
+            token_file=None,
+        )
+        variant_map = {"variants": [{"color": "Red", "ids": [101]}]}
 
         with (
-            patch("src.tools.parse_args", return_value="get_printify_variant_ids"),
             patch(
-                "src.tools.get_printify_variant_ids", return_value=variant_map
+                "src.printify_api_tools.get_variant_info.parse_args",
+                return_value=args,
+            ),
+            patch(
+                "src.printify_api_tools.get_variant_info.get_printify_variant_ids",
+                return_value=variant_map,
             ) as mock_get_variants,
-            patch("src.tools.pprint") as mock_pprint,
+            patch("src.printify_api_tools.get_variant_info.pprint") as mock_pprint,
         ):
-            main()
+            variant_info_main()
 
-        mock_get_variants.assert_called_once_with()
+        mock_get_variants.assert_called_once_with(
+            output_path="../data/variant_map.json",
+            print_provider_id=None,
+            blueprint_id=None,
+            token=None,
+        )
         mock_pprint.assert_called_once_with(variant_map)
 
-    def test_exits_with_status_one_on_error(self):
-        """Exits with code 1 when the selected command raises an exception."""
+    def test_product_info_main_exits_with_status_one_on_error(self):
+        """Exits with code 1 when the product info CLI raises an exception."""
+        args = argparse.Namespace(
+            list_ids=False,
+            shop_id=None,
+            token_file=None,
+            page=None,
+            limit=None,
+            output_path="../data/product_ids.txt",
+        )
+
         with (
-            patch("src.tools.parse_args", return_value="get_all_products"),
-            patch("src.tools.get_all_products", side_effect=RuntimeError("failure")),
-            patch("src.tools.sys.exit", side_effect=SystemExit(1)) as mock_exit,
+            patch(
+                "src.printify_api_tools.get_product_info.parse_args",
+                return_value=args,
+            ),
+            patch(
+                "src.printify_api_tools.get_product_info.get_all_products",
+                side_effect=RuntimeError("failure"),
+            ),
+            patch(
+                "src.printify_api_tools.get_product_info.sys.exit",
+                side_effect=SystemExit(1),
+            ) as mock_exit,
         ):
             with pytest.raises(SystemExit, match="1"):
-                main()
+                product_info_main()
+
+        mock_exit.assert_called_once_with(1)
+
+    def test_publish_product_main_exits_with_status_one_on_error(self):
+        """Exits with code 1 when the publish CLI raises an exception."""
+        args = argparse.Namespace(
+            product_id=PRODUCT_ID,
+            shop_id=None,
+            token_file=None,
+        )
+
+        with (
+            patch(
+                "src.printify_api_tools.publish_product.parse_args",
+                return_value=args,
+            ),
+            patch(
+                "src.printify_api_tools.publish_product.publish_product",
+                side_effect=RuntimeError("failure"),
+            ),
+            patch(
+                "src.printify_api_tools.publish_product.sys.exit",
+                side_effect=SystemExit(1),
+            ) as mock_exit,
+        ):
+            with pytest.raises(SystemExit, match="1"):
+                publish_product_main()
 
         mock_exit.assert_called_once_with(1)

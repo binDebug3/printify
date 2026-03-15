@@ -28,15 +28,15 @@ ARTIFACTS_DIR = PROJECT_ROOT / "tests" / "artifacts"
 
 
 def _find_sample_design_png() -> Optional[Path]:
-    """Find one real design.png in data/images for visual testing.
+    """Find one real design.png in data/products for visual testing.
 
     Returns:
 
         A path to the first available design.png, or None if not found.
     """
-    log_action("Searching for a sample design.png under data/images")
-    images_root = PROJECT_ROOT.parent / "data" / "images"
-    for path in sorted(images_root.glob("*/design.png")):
+    log_action("Searching for a sample design.png under data/products")
+    products_root = PROJECT_ROOT.parent / "data" / "products"
+    for path in sorted(products_root.glob("*/design.png")):
         if path.is_file():
             return path
     return None
@@ -54,7 +54,7 @@ def test_manual_background_removal_visual_artifacts() -> None:
     log_action("Starting visual manual background-removal test")
     sample_path = _find_sample_design_png()
     if sample_path is None:
-        pytest.skip("No design.png found under data/images")
+        pytest.skip("No design.png found under data/products")
 
     original_bytes = sample_path.read_bytes()
     remover = remove_bg_module.RemoveBgClient(

@@ -164,9 +164,9 @@ def _build_idea_object(raw_idea: dict[str, Any], keyword: str) -> Idea:
     """
     normalized: Dict[str, Any] = _normalize_idea_payload(raw_idea, keyword)
     original_title: str = normalized["title"]
-    title: str = unique_versioned_title(original_title, constants.IMAGES_DIR)
+    title: str = unique_versioned_title(original_title, constants.PRODUCTS_DIR)
     folder_name: str = slugify_title(title)
-    folder_path: Path = constants.IMAGES_DIR / folder_name
+    folder_path: Path = constants.PRODUCTS_DIR / folder_name
     normalized["title"] = title
     return Idea(
         keyword=keyword,
@@ -553,7 +553,7 @@ def _run_manual_design_review(
         "decisions": decision_log,
     }
     write_json(
-        constants.IMAGES_DIR / f"{slugify_title(keyword)}_design_review.json",
+        constants.PRODUCTS_DIR / f"{slugify_title(keyword)}_design_review.json",
         review_summary,
     )
     return selected_entries
@@ -607,7 +607,7 @@ def _generate_listing_fields(
     )[: constants.KEYWORDS_COUNT]
 
     write_text(idea.folder_path / "title.txt", generated_title)
-    write_text(idea.folder_path / "personas.txt", personas_text)
+    write_text(idea.folder_path / "buyer_personas.txt", personas_text)
     write_text(idea.folder_path / "description.txt", full_description)
     write_text(idea.folder_path / "keywords.txt", json.dumps(keywords, indent=2))
 
@@ -714,7 +714,7 @@ def run_pipeline(
                 filtered_ideas_per_keyword=constants.FILTERED_IDEAS_PER_KEYWORD,
             )
             write_json(
-                constants.IMAGES_DIR / f"{slugify_title(keyword)}_filtering.json",
+                constants.PRODUCTS_DIR / f"{slugify_title(keyword)}_filtering.json",
                 filter_metadata,
             )
         except Exception as exc:  # noqa: BLE001
@@ -841,7 +841,7 @@ def run_pipeline(
                     )
 
                 payload: Dict[str, Any] = printify_client.build_payload(
-                    title=unique_versioned_title(listing_title, constants.IMAGES_DIR),
+                    title=unique_versioned_title(listing_title, constants.PRODUCTS_DIR),
                     description=description,
                     tags=tags,
                     selected_colors=selected_colors,

@@ -7,7 +7,7 @@ import re
 AUTOMATION_ROOT: Path = Path(__file__).resolve().parents[3]
 DATA_DIR: Path = AUTOMATION_ROOT / "data"
 PROMPTS_DIR: Path = DATA_DIR / "prompts"
-IMAGES_DIR: Path = DATA_DIR / "images"
+PRODUCTS_DIR: Path = DATA_DIR / "products"
 META_DIR: Path = AUTOMATION_ROOT / "meta"
 
 IDEAS_CSV_PATH: Path = DATA_DIR / "ideas.csv"
@@ -72,7 +72,7 @@ PRINT_SCALE: float = 0.65
 KEYWORDS_COUNT: int = 10
 MAX_ALLOWED_TAGS: int = 13
 KEYWORD_MAX_LENGTH: int = 20
-CROP_CENTER_PERCENT: float = 0.8
+CROP_CENTER_PERCENT: float = 0.9
 DESIGN_CROP_PADDING_PERCENT: float = 0.05
 
 # Etsy mockup sync

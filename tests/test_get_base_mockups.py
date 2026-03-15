@@ -47,7 +47,7 @@ class TestSaveMockups:
         }
 
         links_path = tmp_path / "links.txt"
-        out_dir = tmp_path / "images"
+        out_dir = tmp_path / "proudcts"
 
         with (
             patch.object(get_base_mockups, "fetch_product", return_value=product),
@@ -99,7 +99,7 @@ class TestSaveMockups:
         }
 
         links_path = tmp_path / "links.txt"
-        out_dir = tmp_path / "images"
+        out_dir = tmp_path / "products"
         out_dir.mkdir(parents=True, exist_ok=True)
         existing_image = out_dir / "oceanBlue.png"
         existing_image.write_bytes(b"already-there")
@@ -138,7 +138,7 @@ class TestSaveMockups:
             "https://example.com/assets/24946802/73196/b.png\n",
             encoding="utf-8",
         )
-        out_dir = tmp_path / "images"
+        out_dir = tmp_path / "products"
 
         with (
             patch.object(
@@ -165,7 +165,7 @@ class TestSaveMockups:
             "https://example.com/assets/no-id/a.png\n",
             encoding="utf-8",
         )
-        out_dir = tmp_path / "images"
+        out_dir = tmp_path / "products"
 
         with (
             patch.object(get_base_mockups, "load_variant_color_map", return_value={}),

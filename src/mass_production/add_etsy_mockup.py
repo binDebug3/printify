@@ -2,7 +2,7 @@
 
 This module bridges Printify-published products with Etsy listing image updates.
 It uses the published product's nickname to locate the generated mockup folder in
-data/images, fetches the live Printify product title, finds the corresponding Etsy
+data/products, fetches the live Printify product title, finds the corresponding Etsy
 listing by title, and uploads the cropped custom mockup as the primary listing
 image.
 """
@@ -20,7 +20,9 @@ from logger_config import log_action
 from tools import load_api_token
 
 
-def load_etsy_config(config_path: Path = constants.DEFAULT_ETSY_CONFIG_PATH) -> EtsyConfig:
+def load_etsy_config(
+    config_path: Path = constants.DEFAULT_ETSY_CONFIG_PATH,
+) -> EtsyConfig:
     """Load Etsy credentials from the shared JSON metadata file.
 
     Args:
@@ -76,19 +78,19 @@ def fetch_printify_product_title(
 
 
 def resolve_mockup_path(
-    nick_name: str, images_dir: Path = constants.IMAGES_DIR
+    nick_name: str, products_dir: Path = constants.PRODUCTS_DIR
 ) -> Path:
     """Resolve the primary cropped mockup path for a nickname folder.
 
     Args:
-        nick_name: Folder name under data/images.
-        images_dir: Base images directory.
+        nick_name: Folder name under data/products.
+        products_dir: Base products directory.
 
     Returns:
         Path to the first matching cropped mockup image.
     """
     log_action(f"Resolving Etsy mockup image for nickname folder '{nick_name}'")
-    folder_path: Path = images_dir / nick_name
+    folder_path: Path = products_dir / nick_name
     if not folder_path.exists() or not folder_path.is_dir():
         raise FileNotFoundError(f"Mockup folder not found for nickname '{nick_name}'")
 
@@ -110,7 +112,7 @@ def resolve_mockup_path(
 def add_mockups_for_published_products(
     published_products: List[Dict[str, str]],
     etsy_config_path: Path = constants.DEFAULT_ETSY_CONFIG_PATH,
-    images_dir: Path = constants.IMAGES_DIR,
+    products_dir: Path = constants.PRODUCTS_DIR,
     make_primary: bool = True,
 ) -> Dict[str, int]:
     """Add generated custom mockups to newly published Etsy listings.
@@ -119,7 +121,7 @@ def add_mockups_for_published_products(
         published_products: Successful publish records with product_id, shop_id,
             and nick_name.
         etsy_config_path: Path to the Etsy credential JSON file.
-        images_dir: Base images directory.
+        products_dir: Base products directory.
         make_primary: Whether to upload the mockup as the first listing image.
 
     Returns:
@@ -159,7 +161,7 @@ def add_mockups_for_published_products(
                 )
 
             mockup_path: Path = resolve_mockup_path(
-                nick_name=nick_name, images_dir=images_dir
+                nick_name=nick_name, products_dir=products_dir
             )
             etsy_client.upload_listing_image(
                 listing_id=listing_id,

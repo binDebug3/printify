@@ -86,7 +86,7 @@ class TestPostDryRunHelpers:
         (tmp_path / "Modern_Dad_Sneaker_Minimalist_1").mkdir()
 
         with (
-            patch.object(post_dry_run_module.constants, "IMAGES_DIR", tmp_path),
+            patch.object(post_dry_run_module.constants, "PRODUCTS_DIR", tmp_path),
             patch.object(
                 post_dry_run_module, "_abort", side_effect=SystemExit(1)
             ) as mock_abort,

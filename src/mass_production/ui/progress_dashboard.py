@@ -19,9 +19,9 @@ IMAGE_SLOT_LABELS: Dict[str, str] = {
     "generated_mockup": "Generated Mockup",
     "cropped_mockup": "Cropped Mockup",
 }
-MAX_RECENT_ERRORS: int = 8
+MAX_RECENT_LOG_LINES: int = 14
 POLL_INTERVAL_MS: int = 180
-THUMBNAIL_SIZE: Tuple[int, int] = (236, 236)
+THUMBNAIL_SIZE: Tuple[int, int] = (190, 190)
 
 
 class PipelineProgressDashboard:
@@ -50,6 +50,8 @@ class PipelineProgressDashboard:
         self._successful_ideas: int = 0
         self._failed_ideas: int = 0
         self._total_ideas: int = 0
+        self._idea_index: int = 0
+        self._idea_total: int = 0
 
         if not self._enabled:
             return
@@ -100,24 +102,44 @@ class PipelineProgressDashboard:
         log_action(f"Updating UI stage to '{stage}'")
         self._emit("stage", stage)
 
-    def set_idea_name(self, idea_name: str) -> None:
+    def set_idea_name(
+        self,
+        idea_name: str,
+        idea_index: Optional[int] = None,
+        idea_total: Optional[int] = None,
+    ) -> None:
         """Set the current idea title displayed in UI.
 
         Args:
             idea_name: Active idea title.
+            idea_index: Optional one-based idea index for current stage.
+            idea_total: Optional total ideas count for current stage.
         """
-        log_action(f"Updating UI active idea to '{idea_name}'")
-        self._emit("idea_name", idea_name)
+        has_idea_progress: bool = False
+        if isinstance(idea_index, int) and isinstance(idea_total, int):
+            has_idea_progress = idea_index > 0 and idea_total > 0
+        index_display: str = (
+            f"{idea_index}/{idea_total} - " if has_idea_progress else ""
+        )
+        log_action(f"Updating UI active idea to '{index_display}{idea_name}'")
+        self._emit(
+            "idea_name",
+            {
+                "idea_name": idea_name,
+                "idea_index": idea_index,
+                "idea_total": idea_total,
+            },
+        )
 
     def update_image(self, image_slot: str, image_path: Path) -> None:
         """Update one image panel to show the latest generated asset.
 
         Args:
-            image_slot: Slot key from IMAGE_SLOT_LABELS.
+            image_slot: Slot key path.
             image_path: Path to the generated image.
         """
         path: str = str(image_path)
-        log_action(f"Updating UI image slot '{cut(image_slot)}' with '{path}'")
+        log_action(f"Updating UI image slot '{cut(image_slot)}' with '{cut(path)}'")
         self._emit("image", {"slot": image_slot, "path": path})
 
     def add_error(self, message: str) -> None:
@@ -183,9 +205,10 @@ class PipelineProgressDashboard:
 
         self._root = tk.Tk()
         self._root.title("Mass Production Progress")
-        self._root.geometry("1420x900")
+        self._root.geometry("1420x702")
         self._root.configure(bg="#F4F1EA")
         self._root.protocol("WM_DELETE_WINDOW", self._on_window_close)
+        self._bring_window_to_front()
 
         self._keyword_var = tk.StringVar(value="Keyword: waiting...")
         self._idea_var = tk.StringVar(value="Idea: waiting...")
@@ -195,8 +218,6 @@ class PipelineProgressDashboard:
 
         self._image_labels: Dict[str, Any] = {}
         self._image_refs: Dict[str, Any] = {}
-        self._image_path_vars: Dict[str, Any] = {}
-
         self._build_layout()
         self._ui_ready.set()
         try:
@@ -310,48 +331,36 @@ class PipelineProgressDashboard:
                 font=("Segoe UI", 10),
                 bg="#EEF1EC",
                 fg="#4D5855",
-                width=30,
-                height=14,
-                wraplength=220,
+                width=24,
+                height=11,
+                wraplength=180,
                 justify="center",
             )
             image_label.pack(fill="both", expand=True, pady=(6, 6))
 
-            path_var = tk.StringVar(value="-")
-            tk.Label(
-                panel,
-                textvariable=path_var,
-                font=("Consolas", 8),
-                bg="#FFFFFF",
-                fg="#68716F",
-                wraplength=250,
-                justify="left",
-            ).pack(anchor="w")
-
             self._image_labels[slot] = image_label
-            self._image_path_vars[slot] = path_var
 
         errors_frame = tk.Frame(root_frame, bg="#FFFFFF", padx=10, pady=8)
         errors_frame.pack(fill="x", pady=(10, 0))
         tk.Label(
             errors_frame,
-            text="Recent Errors",
+            text="Recent Activity",
             font=("Segoe UI Semibold", 11),
             bg="#FFFFFF",
-            fg="#7B2638",
+            fg="#1F4B43",
         ).pack(anchor="w")
 
-        self._errors_listbox = tk.Listbox(
+        self._log_listbox = tk.Listbox(
             errors_frame,
             height=6,
             font=("Consolas", 10),
-            bg="#FBF8F9",
-            fg="#5F1E2D",
+            bg="#F6FAF9",
+            fg="#2A3A36",
             activestyle="none",
             relief="flat",
             borderwidth=0,
         )
-        self._errors_listbox.pack(fill="x", pady=(6, 0))
+        self._log_listbox.pack(fill="x", pady=(6, 0))
 
     def _poll_events(self) -> None:
         """Process queued events and refresh timing/progress labels."""
@@ -387,35 +396,70 @@ class PipelineProgressDashboard:
             self._keyword_var.set(
                 f"Keyword: {keyword_index}/{keyword_total} - {keyword}"
             )
+            self._append_log(f"Keyword {keyword_index}/{keyword_total}: {keyword}")
             return
         if event_type == "total_ideas":
             self._total_ideas = max(0, int(payload))
+            self._append_log(f"Total ideas scheduled: {self._total_ideas}")
             return
         if event_type == "stage":
             self._stage_var.set(f"Stage: {str(payload)}")
+            self._append_log(f"Stage: {str(payload)}")
             return
         if event_type == "idea_name":
-            self._idea_var.set(f"Idea: {str(payload)}")
+            if isinstance(payload, dict):
+                self._idea_index = max(0, int(payload.get("idea_index", 0) or 0))
+                self._idea_total = max(0, int(payload.get("idea_total", 0) or 0))
+                idea_name = str(payload.get("idea_name", ""))
+            else:
+                self._idea_index = 0
+                self._idea_total = 0
+                idea_name = str(payload)
+
+            if self._idea_index > 0 and self._idea_total > 0:
+                self._idea_var.set(
+                    f"Idea: {self._idea_index}/{self._idea_total} - {idea_name}"
+                )
+                self._append_log(
+                    f"Idea {self._idea_index}/{self._idea_total}: {idea_name}"
+                )
+            else:
+                self._idea_var.set(f"Idea: {idea_name}")
+                self._append_log(f"Idea: {idea_name}")
             return
         if event_type == "image":
             image_slot = str(payload.get("slot", ""))
             path = str(payload.get("path", "")).strip()
             self._update_image_slot(image_slot=image_slot, image_path=path)
+            self._append_log(f"Updated image slot: {image_slot}")
             return
         if event_type == "error":
-            self._append_error(str(payload))
+            self._append_log(f"ERROR: {str(payload)}")
             return
         if event_type == "idea_finished":
             succeeded = bool(payload)
             self._finished_ideas += 1
             if succeeded:
                 self._successful_ideas += 1
+                self._append_log("Idea finished: success")
             else:
                 self._failed_ideas += 1
+                self._append_log("Idea finished: failed")
             return
         if event_type == "close":
+            self._append_log("Closing dashboard")
             self._root.after(0, self._shutdown_ui)
             return
+
+    def _bring_window_to_front(self) -> None:
+        """Bring the dashboard window to the foreground when it opens."""
+        try:
+            self._root.lift()
+            self._root.attributes("-topmost", True)
+            self._root.after(250, lambda: self._root.attributes("-topmost", False))
+            self._root.focus_force()
+        except Exception as exc:  # noqa: BLE001
+            log_action(f"Dashboard focus request skipped: {exc}")
 
     def _shutdown_ui(self) -> None:
         """Stop the Tk main loop and destroy the root window safely."""
@@ -445,13 +489,13 @@ class PipelineProgressDashboard:
         ]:
             setattr(self, attr_name, None)
 
-        for attr_name in ["_image_refs", "_image_labels", "_image_path_vars"]:
+        for attr_name in ["_image_refs", "_image_labels"]:
             attr_value = getattr(self, attr_name, None)
             if isinstance(attr_value, dict):
                 attr_value.clear()
             setattr(self, attr_name, None)
 
-        for attr_name in ["_errors_listbox", "_progress", "_root"]:
+        for attr_name in ["_log_listbox", "_progress", "_root"]:
             setattr(self, attr_name, None)
 
         for attr_name in [
@@ -472,11 +516,9 @@ class PipelineProgressDashboard:
         """
         log_action(f"Rendering dashboard image for slot '{image_slot}'")
         label = self._image_labels.get(image_slot)
-        path_var = self._image_path_vars.get(image_slot)
-        if label is None or path_var is None:
+        if label is None:
             return
 
-        path_var.set(image_path)
         path = Path(image_path)
         if not path.exists():
             label.configure(
@@ -504,18 +546,18 @@ class PipelineProgressDashboard:
         self._image_refs[image_slot] = tk_image
         label.configure(image=tk_image, text="", bg="#EEF1EC")
 
-    def _append_error(self, message: str) -> None:
-        """Append one error line into the recent error list.
+    def _append_log(self, message: str) -> None:
+        """Append one message into the recent activity list.
 
         Args:
-            message: Error message to append.
+            message: Activity message to append.
         """
-        log_action("Appending message into dashboard recent errors")
-        existing_size = int(self._errors_listbox.size())
-        if existing_size >= MAX_RECENT_ERRORS:
-            self._errors_listbox.delete(0)
-        self._errors_listbox.insert("end", message)
-        self._errors_listbox.see("end")
+        existing_size = int(self._log_listbox.size())
+        if existing_size >= MAX_RECENT_LOG_LINES:
+            self._log_listbox.delete(0)
+        timestamp: str = time.strftime("%H:%M:%S")
+        self._log_listbox.insert("end", f"{timestamp} | {message}")
+        self._log_listbox.see("end")
 
     def _refresh_progress_widgets(self) -> None:
         """Refresh progress bar and progress summary labels."""
@@ -551,6 +593,3 @@ class PipelineProgressDashboard:
         """Handle user-initiated window close safely."""
         log_action("User closed the progress dashboard window")
         self._shutdown_ui()
-
-
-# End of module.

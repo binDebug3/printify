@@ -11,19 +11,21 @@ from PIL import Image
 from schedule.logger_config import log_action
 
 
-def cut(path: Path, separator: str = "automation") -> str:
+def cut(path: Path | str, separator: str = "automation") -> str:
     """
-    Split a Path by a separator and return the last element.
+    Split a Path or string by a separator and return the last element.
 
     Args:
-        path: The input Path to split.
+        path: The input Path or string to split.
         separator: The separator to use for splitting.
 
     Returns:
         The last element after splitting the Path as a string.
+
     """
-    parts: List[str] = str(path).split(separator)
-    return parts[-1] if parts else str(path)
+    path_str: str = str(path)
+    parts: List[str] = path_str.split(separator)
+    return parts[-1] if parts else path_str
 
 
 def read_text(path: Path) -> str:
@@ -271,7 +273,9 @@ def unique_versioned_title(title: str, products_dir: Path) -> str:
         Unique versioned title.
 
     """
-    log_action(f"Generating unique versioned title for '{title}' in '{cut(products_dir)}'")
+    log_action(
+        f"Generating unique versioned title for '{title}' in '{cut(products_dir)}'"
+    )
     slug: str = slugify_title(title)
     candidate: str = title
 

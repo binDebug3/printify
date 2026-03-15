@@ -479,7 +479,7 @@ def _generate_post_design_assets(
     ).strip()
     write_text(idea.folder_path / "background.txt", mockup_scene)
 
-    # mock up asdf
+    # mock up
     default_mockup_path: Path = create_default_color_mockup(
         design_path=transparent_path,
         color=mockup_color,
@@ -843,15 +843,22 @@ def run_pipeline(
             loop_start_time: float = time.monotonic()
             completed_iterations: int = 0
             for idea_index, raw_idea in enumerate(filtered_ideas):
+                idea_number: int = idea_index + 1
                 iteration_start_time: float = time.monotonic()
                 iteration_status: str = "success"
                 try:
                     _safe_dashboard_call(
                         dashboard, "set_stage", "Generating raw design"
                     )
-                    log_action(f"Processing idea {idea_index}/{n_ideas}")
+                    log_action(f"Processing idea {idea_number}/{n_ideas}")
                     idea: Idea = _build_idea_object(raw_idea=raw_idea, keyword=keyword)
-                    _safe_dashboard_call(dashboard, "set_idea_name", idea.title)
+                    _safe_dashboard_call(
+                        dashboard,
+                        "set_idea_name",
+                        idea.title,
+                        idea_number,
+                        n_ideas,
+                    )
                     idea.folder_path.mkdir(parents=True, exist_ok=True)
                     _save_idea_json(idea)
 
@@ -936,12 +943,19 @@ def run_pipeline(
                         _safe_dashboard_call(dashboard, "mark_idea_finished", False)
                     continue
 
-            for design_entry in approved_designs:
+            approved_ideas_count: int = len(approved_designs)
+            for approved_index, design_entry in enumerate(approved_designs, start=1):
                 try:
                     idea: Idea = design_entry["idea"]
                     design_path: Path = design_entry["design_path"]
                     design_bytes: bytes = design_entry["design_bytes"]
-                    _safe_dashboard_call(dashboard, "set_idea_name", idea.title)
+                    _safe_dashboard_call(
+                        dashboard,
+                        "set_idea_name",
+                        idea.title,
+                        approved_index,
+                        approved_ideas_count,
+                    )
                     _safe_dashboard_call(
                         dashboard,
                         "set_stage",

@@ -23,7 +23,7 @@ if str(SRC_ROOT) not in sys.path:
 if str(MASS_PRODUCTION_ROOT) not in sys.path:
     sys.path.insert(0, str(MASS_PRODUCTION_ROOT))
 
-from design_review_ui import review_generated_designs  # noqa: E402
+from ui.design_review_ui import review_generated_designs  # noqa: E402
 from logger_config import log_action  # noqa: E402
 
 

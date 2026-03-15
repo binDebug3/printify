@@ -13,7 +13,7 @@ from logger_config import log_action
 
 import constants
 from design_crop import crop_design_image_to_content, create_default_color_mockup
-from design_review_ui import review_generated_designs
+from ui.design_review_ui import review_generated_designs
 from clients.gemini_client import GeminiClient
 from io_utils import (
     crop_center_percent,

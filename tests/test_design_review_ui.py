@@ -10,7 +10,7 @@ MASS_PRODUCTION_ROOT = (
 if str(MASS_PRODUCTION_ROOT) not in sys.path:
     sys.path.insert(0, str(MASS_PRODUCTION_ROOT))
 
-import design_review_ui as review_ui_module  # noqa: E402
+import ui.design_review_ui as review_ui_module  # noqa: E402
 
 
 class TestBuildHtml:

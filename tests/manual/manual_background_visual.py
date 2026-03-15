@@ -22,7 +22,7 @@ if str(MASS_PRODUCTION_ROOT) not in sys.path:
     sys.path.insert(0, str(MASS_PRODUCTION_ROOT))
 
 from logger_config import log_action  # noqa: E402
-import remove_bg as remove_bg_module  # noqa: E402
+import photoshop.remove_bg as remove_bg_module  # noqa: E402
 
 ARTIFACTS_DIR = PROJECT_ROOT / "tests" / "artifacts"
 

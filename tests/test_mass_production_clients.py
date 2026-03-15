@@ -17,7 +17,7 @@ if str(MASS_PRODUCTION_ROOT) not in sys.path:
 
 import clients.gemini_client as gemini_module  # noqa: E402
 import clients.printify_client as printify_module  # noqa: E402
-import remove_bg as remove_bg_module  # noqa: E402
+import photoshop.remove_bg as remove_bg_module  # noqa: E402
 
 
 class TestPrintifyClient:

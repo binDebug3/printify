@@ -10,7 +10,7 @@ import pandas as pd
 MASS_PRODUCTION_ROOT = Path(__file__).resolve().parent.parent / "src" / "mass_production"
 sys.path.insert(0, str(MASS_PRODUCTION_ROOT))
 
-from io_utils import mark_idea_as_published, read_keywords_from_ideas_csv  # noqa: E402
+from photoshop.io_utils import mark_idea_as_published, read_keywords_from_ideas_csv  # noqa: E402
 
 
 def test_read_keywords_from_ideas_csv_only_includes_used_false(tmp_path):

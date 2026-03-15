@@ -18,7 +18,7 @@ if str(SRC_ROOT) not in sys.path:
 if str(MASS_PRODUCTION_ROOT) not in sys.path:
     sys.path.insert(0, str(MASS_PRODUCTION_ROOT))
 
-import design_crop as design_crop_module  # noqa: E402
+import photoshop.design_crop as design_crop_module  # noqa: E402
 
 
 def _make_png_bytes(

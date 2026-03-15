@@ -11,7 +11,7 @@ MASS_PRODUCTION_ROOT = (
 if str(MASS_PRODUCTION_ROOT) not in sys.path:
     sys.path.insert(0, str(MASS_PRODUCTION_ROOT))
 
-import add_etsy_mockup as etsy_mockup_module  # noqa: E402
+import clients.add_etsy_mockup as etsy_mockup_module  # noqa: E402
 
 
 class TestLoadEtsyConfig:

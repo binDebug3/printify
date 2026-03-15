@@ -6,7 +6,7 @@ API call routing, email notification, CSV write-back, and summary output.
 
 from datetime import datetime
 import sys
-from types import SimpleNamespace
+from types import ModuleType
 from unittest.mock import patch, MagicMock
 import pandas as pd
 import pytest
@@ -209,14 +209,27 @@ class TestMain:
         )
         mock_resp = MagicMock(status_code=200)
         fake_sync = MagicMock()
-        fake_module = SimpleNamespace(add_mockups_for_published_products=fake_sync)
+        fake_clients_pkg = ModuleType("clients")
+        fake_add_etsy_mockup_module = ModuleType("clients.add_etsy_mockup")
+        setattr(
+            fake_add_etsy_mockup_module,
+            "add_mockups_for_published_products",
+            fake_sync,
+        )
 
         with (
             patch("src.publish.load_api_token", return_value="tok"),
             patch("src.publish.publish_product", return_value=mock_resp),
             patch("src.publish.send_email"),
             patch("src.publish.time.sleep") as mock_sleep,
-            patch.dict(sys.modules, {"add_etsy_mockup": fake_module}, clear=False),
+            patch.dict(
+                sys.modules,
+                {
+                    "clients": fake_clients_pkg,
+                    "clients.add_etsy_mockup": fake_add_etsy_mockup_module,
+                },
+                clear=False,
+            ),
             patch.object(
                 publish_module,
                 "_configure_mass_production_module_path",

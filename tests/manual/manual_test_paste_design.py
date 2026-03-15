@@ -27,7 +27,7 @@ if str(MASS_PRODUCTION_ROOT) not in sys.path:
     sys.path.insert(0, str(MASS_PRODUCTION_ROOT))
 
 from logger_config import log_action  # noqa: E402
-from design_crop import create_default_color_mockup  # noqa: E402
+from photoshop.design_crop import create_default_color_mockup  # noqa: E402
 
 
 DEFAULT_COLOR: str = "white"

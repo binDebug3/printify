@@ -105,7 +105,7 @@ def _sync_etsy_mockups_after_publish(published_products: List[Dict[str, str]]) -
     log_action("Waiting 60 seconds before attempting Etsy custom mockup sync")
     time.sleep(60)
     _configure_mass_production_module_path()
-    from add_etsy_mockup import add_mockups_for_published_products
+    from clients.add_etsy_mockup import add_mockups_for_published_products
 
     add_mockups_for_published_products(published_products)
 

@@ -18,7 +18,7 @@ if str(SRC_ROOT) not in sys.path:
 from logger_config import log_action  # noqa: E402
 
 import constants  # noqa: E402
-from io_utils import read_json, read_text  # noqa: E402
+from photoshop.io_utils import read_json, read_text  # noqa: E402
 from clients.printify_client import PrintifyClient  # noqa: E402
 
 

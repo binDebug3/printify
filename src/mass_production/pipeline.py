@@ -12,10 +12,10 @@ from typing import Any, List, Dict, Optional
 from logger_config import log_action
 
 import constants
-from design_crop import crop_design_image_to_content, create_default_color_mockup
+from photoshop.design_crop import crop_design_image_to_content, create_default_color_mockup
 from ui.design_review_ui import review_generated_designs
 from clients.gemini_client import GeminiClient
-from io_utils import (
+from photoshop.io_utils import (
     crop_center_percent,
     mark_idea_as_published,
     normalize_keywords_csv_to_json_array,
@@ -32,7 +32,7 @@ from io_utils import (
 )
 from models import Idea
 from clients.printify_client import PrintifyClient
-from remove_bg import RemoveBgClient
+from photoshop.remove_bg import RemoveBgClient
 
 
 def _require_env(var_name: str) -> str:

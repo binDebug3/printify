@@ -10,7 +10,7 @@ import requests
 
 import constants
 from logger_config import log_action
-from io_utils import cut
+from photoshop.io_utils import cut
 
 
 class PrintifyClient:

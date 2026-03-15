@@ -174,9 +174,18 @@ class TestRunPipeline:
             patch.object(
                 pipeline_module, "mark_idea_as_published", return_value=True
             ) as mock_mark,
+            patch.object(
+                pipeline_module,
+                "append_created_product_to_schedules",
+                return_value=True,
+            ) as mock_append_schedule,
         ):
             pipeline_module.run_pipeline(dry_run=False)
 
+        mock_append_schedule.assert_called_once_with(
+            product_title="Listing Title 1",
+            product_id="prod-1",
+        )
         mock_mark.assert_called_once_with(
             path=constants.IDEAS_CSV_PATH,
             keyword="alpha",

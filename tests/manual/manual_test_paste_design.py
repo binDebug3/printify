@@ -53,7 +53,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--design-path",
         default=None,
-        help="Path to design image. Defaults to random data/products/**/design_transparent.png.",
+        help=(
+            "Path to design image. Defaults to random "
+            "data/products/**/design_transparent.png."
+        ),
     )
     parser.add_argument(
         "--color",

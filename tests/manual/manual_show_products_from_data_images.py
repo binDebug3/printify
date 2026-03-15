@@ -2,7 +2,7 @@
 """Manual-only viewer test that serves products from data/products in a browser UI.
 
 Run manually from the printify directory:
-python -m pytest tests/manual/manual_show_products_from_data_images.py::test_manual_show_products_from_data_images -s --no-header --no-summary 
+python -m pytest tests/manual/manual_show_products_from_data_images.py::test_manual_show_products_from_data_images -s --no-header --no-summary
 
 This file is intentionally named so it is not discovered by default pytest runs.
 """
@@ -199,6 +199,36 @@ def _build_view_model_from_folder(folder_path: Path) -> Dict[str, Any]:
     return item
 
 
+def _iter_product_folders(images_dir: Path) -> list[Path]:
+    """Collect product folders from flat and keyword-scoped layouts.
+
+    Args:
+        images_dir: Root data/products directory.
+
+    Returns:
+        Deduplicated sorted product folder paths.
+    """
+    candidates: list[Path] = []
+    if not images_dir.exists():
+        return candidates
+
+    for path in images_dir.iterdir():
+        if path.is_dir():
+            candidates.append(path)
+    for path in images_dir.glob("*/*"):
+        if path.is_dir():
+            candidates.append(path)
+
+    deduped_paths: list[Path] = []
+    seen_paths: set[Path] = set()
+    for path in sorted(candidates):
+        if path in seen_paths:
+            continue
+        seen_paths.add(path)
+        deduped_paths.append(path)
+    return deduped_paths
+
+
 def _collect_view_models_from_data_images() -> Tuple[List[Dict[str, Any]], List[str]]:
     """Collect valid product view models from data/products folder structure.
 
@@ -209,9 +239,7 @@ def _collect_view_models_from_data_images() -> Tuple[List[Dict[str, Any]], List[
     included_items: List[Dict[str, Any]] = []
     skipped_messages: List[str] = []
 
-    for folder_path in sorted(IMAGES_DIR.iterdir()):
-        if not folder_path.is_dir():
-            continue
+    for folder_path in _iter_product_folders(IMAGES_DIR):
         try:
             included_items.append(_build_view_model_from_folder(folder_path))
         except Exception as exc:  # noqa: BLE001

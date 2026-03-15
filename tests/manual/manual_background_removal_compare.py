@@ -74,10 +74,10 @@ def _collect_design_paths(products_dir: Path) -> list[Path]:
         FileNotFoundError: If no candidate design files are found.
     """
     log_action(f"Collecting design.png candidates from '{products_dir}'")
-    design_paths: list[Path] = sorted(products_dir.glob("*/design.png"))
+    design_paths: list[Path] = sorted(products_dir.rglob("design.png"))
     if not design_paths:
         raise FileNotFoundError(
-            f"No design images found matching '{products_dir}/*/design.png'"
+            f"No design images found matching '{products_dir}/**/design.png'"
         )
     return design_paths
 

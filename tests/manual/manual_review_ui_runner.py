@@ -1,4 +1,4 @@
-"""Standalone manual review UI runner using sample folders from ../data/products.
+"""Standalone manual review UI runner using sample folders from data/products.
 
 Run from the printify directory with:
 python tests/manual/manual_review_ui_runner.py
@@ -50,7 +50,9 @@ def parse_args() -> argparse.Namespace:
         "--folders",
         nargs="+",
         default=DEFAULT_SAMPLE_FOLDERS,
-        help="Folder names under ../data/products to include in the review UI.",
+        help=(
+            "Folder names under data/products/<keyword>/ to include in the review UI."
+        ),
     )
     parser.add_argument(
         "--keyword",
@@ -64,7 +66,7 @@ def _build_review_entry(folder_name: str, review_index: int) -> dict[str, Any]:
     """Build one design review payload entry from a generated image folder.
 
     Args:
-        folder_name: Folder under ../data/products.
+        folder_name: Folder under data/products/<keyword>/.
         review_index: Stable numeric index used by the review UI.
 
     Returns:
@@ -74,11 +76,9 @@ def _build_review_entry(folder_name: str, review_index: int) -> dict[str, Any]:
         FileNotFoundError: If the folder or design image does not exist.
     """
     log_action(f"Building manual review entry for folder '{folder_name}'")
-    folder_path: Path = IMAGES_DIR / folder_name
+    folder_path: Path = _resolve_sample_folder(folder_name)
     design_path: Path = folder_path / "design.png"
 
-    if not folder_path.exists():
-        raise FileNotFoundError(f"Sample folder does not exist: {folder_path}")
     if not design_path.exists():
         raise FileNotFoundError(f"Sample design image does not exist: {design_path}")
 
@@ -91,11 +91,40 @@ def _build_review_entry(folder_name: str, review_index: int) -> dict[str, Any]:
     }
 
 
+def _resolve_sample_folder(folder_name: str) -> Path:
+    """Resolve sample folder in flat or keyword-scoped products layout.
+
+    Args:
+        folder_name: Product folder slug.
+
+    Returns:
+        Resolved folder path.
+
+    Raises:
+        FileNotFoundError: If no matching folder exists.
+    """
+    direct_path: Path = IMAGES_DIR / folder_name
+    if direct_path.exists() and direct_path.is_dir():
+        return direct_path
+
+    if not IMAGES_DIR.exists():
+        raise FileNotFoundError(f"Products directory does not exist: {IMAGES_DIR}")
+
+    for keyword_dir in sorted(IMAGES_DIR.iterdir()):
+        if not keyword_dir.is_dir():
+            continue
+        nested_path: Path = keyword_dir / folder_name
+        if nested_path.exists() and nested_path.is_dir():
+            return nested_path
+
+    raise FileNotFoundError(f"Sample folder does not exist: {folder_name}")
+
+
 def build_review_entries(folder_names: list[str]) -> list[dict[str, Any]]:
     """Build review payload entries from a list of sample folder names.
 
     Args:
-        folder_names: Folder names under ../data/products.
+        folder_names: Folder names under data/products/<keyword>/.
 
     Returns:
         Review UI payload entries.

@@ -36,6 +36,7 @@ from photoshop.io_utils import (
 from models import Idea
 from clients.printify_client import PrintifyClient
 from photoshop.remove_bg import RemoveBgClient
+from schedule_updates import append_created_product_to_schedules
 
 
 def _require_env(var_name: str) -> str:
@@ -165,11 +166,12 @@ def _build_idea_object(raw_idea: dict[str, Any], keyword: str) -> Idea:
     Returns:
         Idea model with derived storage fields.
     """
+    keyword_products_dir: Path = _keyword_products_dir(keyword)
     normalized: Dict[str, Any] = _normalize_idea_payload(raw_idea, keyword)
     original_title: str = normalized["title"]
-    title: str = unique_versioned_title(original_title, constants.PRODUCTS_DIR)
+    title: str = unique_versioned_title(original_title, keyword_products_dir)
     folder_name: str = slugify_title(title)
-    folder_path: Path = constants.PRODUCTS_DIR / folder_name
+    folder_path: Path = keyword_products_dir / folder_name
     normalized["title"] = title
     return Idea(
         keyword=keyword,
@@ -179,6 +181,18 @@ def _build_idea_object(raw_idea: dict[str, Any], keyword: str) -> Idea:
         folder_path=folder_path,
         payload=normalized,
     )
+
+
+def _keyword_products_dir(keyword: str) -> Path:
+    """Get the output directory for one keyword's products.
+
+    Args:
+        keyword: Source keyword value.
+
+    Returns:
+        Per-keyword products directory path.
+    """
+    return constants.PRODUCTS_DIR / slugify_title(keyword)
 
 
 def _generate_ideas_for_keyword(
@@ -524,6 +538,7 @@ def _generate_post_design_assets(
 
 def _run_manual_design_review(
     keyword: str,
+    keyword_products_dir: Path,
     design_entries: list[dict[str, Any]],
     prompts: dict[str, str],
     gemini: GeminiClient,
@@ -534,6 +549,7 @@ def _run_manual_design_review(
 
     Args:
         keyword: Source keyword.
+        keyword_products_dir: Directory for keyword-scoped artifacts.
         design_entries: Generated design entries and idea payloads.
         prompts: Prompt templates.
         gemini: Gemini client.
@@ -618,10 +634,7 @@ def _run_manual_design_review(
         "rejected_indexes": sorted(int(index) for index in rejected_indexes),
         "decisions": decision_log,
     }
-    write_json(
-        constants.PRODUCTS_DIR / f"{slugify_title(keyword)}_design_review.json",
-        review_summary,
-    )
+    write_json(keyword_products_dir / "design_review.json", review_summary)
     return selected_entries
 
 
@@ -807,6 +820,8 @@ def run_pipeline(
 
         total_ideas_scheduled: int = 0
         for idx, (keyword, context) in enumerate(zip(keywords, contexts), start=1):
+            keyword_products_dir: Path = _keyword_products_dir(keyword)
+            keyword_products_dir.mkdir(parents=True, exist_ok=True)
             _safe_dashboard_call(dashboard, "set_keyword", keyword, idx, len(keywords))
             _safe_dashboard_call(
                 dashboard,
@@ -836,10 +851,7 @@ def run_pipeline(
                     "set_total_ideas",
                     total_ideas_scheduled,
                 )
-                write_json(
-                    constants.PRODUCTS_DIR / f"{slugify_title(keyword)}_filtering.json",
-                    filter_metadata,
-                )
+                write_json(keyword_products_dir / "filtering.json", filter_metadata)
             except Exception as exc:  # noqa: BLE001
                 error_message: str = f"Failed to generate ideas for '{keyword}': {exc}"
                 log_action(error_message)
@@ -932,6 +944,7 @@ def run_pipeline(
                 try:
                     approved_designs = _run_manual_design_review(
                         keyword=keyword,
+                        keyword_products_dir=keyword_products_dir,
                         design_entries=generated_designs,
                         prompts=prompts,
                         gemini=gemini,
@@ -1017,7 +1030,8 @@ def run_pipeline(
 
                     payload: Dict[str, Any] = printify_client.build_payload(
                         title=unique_versioned_title(
-                            listing_title, constants.PRODUCTS_DIR
+                            listing_title,
+                            keyword_products_dir,
                         ),
                         description=description,
                         tags=tags,
@@ -1033,6 +1047,21 @@ def run_pipeline(
 
                     result: Dict[str, Any] = printify_client.create_product(payload)
                     write_json(idea.folder_path / "printify_result.json", result)
+                    created_product_id: str = str(result.get("id", "")).strip()
+                    if created_product_id:
+                        try:
+                            schedule_added: bool = append_created_product_to_schedules(
+                                product_title=str(payload.get("title", listing_title)),
+                                product_id=created_product_id,
+                            )
+                            if schedule_added:
+                                log_action(
+                                    f"Scheduled product '{created_product_id}' for auto publish"
+                                )
+                        except Exception as exc:  # noqa: BLE001
+                            log_action(
+                                f"Schedule update failed for product '{created_product_id}': {exc}"
+                            )
                     successful_products_count += 1
                     _safe_dashboard_call(dashboard, "mark_idea_finished", True)
                     log_action(f"Completed idea '{idea.title}'")

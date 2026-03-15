@@ -1,10 +1,10 @@
 """Add generated custom mockups to newly published Etsy listings.
 
 This module bridges Printify-published products with Etsy listing image updates.
-It uses the published product's nickname to locate the generated mockup folder in
-data/products, fetches the live Printify product title, finds the corresponding Etsy
-listing by title, and uploads the cropped custom mockup as the primary listing
-image.
+It uses the published product's nickname to locate the generated mockup folder under
+data/products/<keyword>/<nick_name>, fetches the live Printify product title, finds
+the corresponding Etsy listing by title, and uploads the cropped custom mockup as
+the primary listing image.
 """
 
 import json
@@ -91,6 +91,17 @@ def resolve_mockup_path(
     """
     log_action(f"Resolving Etsy mockup image for nickname folder '{nick_name}'")
     folder_path: Path = products_dir / nick_name
+    if (not folder_path.exists() or not folder_path.is_dir()) and products_dir.exists():
+        for keyword_dir in sorted(
+            products_dir.iterdir(), key=lambda child: child.name.lower()
+        ):
+            if not keyword_dir.is_dir():
+                continue
+            nested_candidate: Path = keyword_dir / nick_name
+            if nested_candidate.exists() and nested_candidate.is_dir():
+                folder_path = nested_candidate
+                break
+
     if not folder_path.exists() or not folder_path.is_dir():
         raise FileNotFoundError(f"Mockup folder not found for nickname '{nick_name}'")
 

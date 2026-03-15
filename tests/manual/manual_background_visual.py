@@ -36,7 +36,7 @@ def _find_sample_design_png() -> Optional[Path]:
     """
     log_action("Searching for a sample design.png under data/products")
     products_root = PROJECT_ROOT.parent / "data" / "products"
-    for path in sorted(products_root.glob("*/design.png")):
+    for path in sorted(products_root.rglob("design.png")):
         if path.is_file():
             return path
     return None

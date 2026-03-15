@@ -165,6 +165,33 @@ def _collect_assets_for_folder(folder_path: Path) -> Optional[ProductAssets]:
     )
 
 
+def _iter_product_folders(products_dir: Path) -> list[Path]:
+    """Collect product folders from flat and keyword-scoped layouts.
+
+    Args:
+        products_dir: Root data/products directory.
+
+    Returns:
+        Deduplicated sorted product folder paths.
+    """
+    candidates: list[Path] = []
+    for path in products_dir.iterdir():
+        if path.is_dir():
+            candidates.append(path)
+    for path in products_dir.glob("*/*"):
+        if path.is_dir():
+            candidates.append(path)
+
+    deduped_paths: list[Path] = []
+    seen_paths: set[Path] = set()
+    for path in sorted(candidates):
+        if path in seen_paths:
+            continue
+        seen_paths.add(path)
+        deduped_paths.append(path)
+    return deduped_paths
+
+
 def discover_products(max_products: int) -> List[ProductAssets]:
     """Discover product folders and collect image assets for simulation.
 
@@ -180,9 +207,7 @@ def discover_products(max_products: int) -> List[ProductAssets]:
         raise FileNotFoundError(f"Products directory does not exist: {products_dir}")
 
     discovered: List[ProductAssets] = []
-    for folder_path in sorted(products_dir.iterdir()):
-        if not folder_path.is_dir():
-            continue
+    for folder_path in _iter_product_folders(products_dir):
         assets = _collect_assets_for_folder(folder_path)
         if assets is None:
             continue

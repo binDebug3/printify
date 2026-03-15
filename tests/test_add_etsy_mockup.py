@@ -58,6 +58,21 @@ class TestResolveMockupPath:
 
         assert result == expected
 
+    def test_resolves_matching_mockup_in_keyword_subfolder(self, tmp_path):
+        """Finds cropped mockup under data/products/<keyword>/<nick_name>."""
+        keyword_dir = tmp_path / "alpha_keyword"
+        keyword_dir.mkdir()
+        folder = keyword_dir / "Folder One"
+        folder.mkdir()
+        expected = folder / "mockup_(pepper)_cropped.png"
+        expected.write_bytes(b"png")
+
+        result = etsy_mockup_module.resolve_mockup_path(
+            "Folder One", products_dir=tmp_path
+        )
+
+        assert result == expected
+
 
 class TestEtsyClient:
     """Tests for EtsyClient."""

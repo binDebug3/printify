@@ -83,7 +83,9 @@ class TestPostDryRunHelpers:
 
     def test_resolve_folder_aborts_with_closest_match_suggestion(self, tmp_path):
         """Suggests the closest existing folder name when the provided slug is missing."""
-        (tmp_path / "Modern_Dad_Sneaker_Minimalist_1").mkdir()
+        keyword_dir = tmp_path / "my_keyword"
+        keyword_dir.mkdir()
+        (keyword_dir / "Modern_Dad_Sneaker_Minimalist_1").mkdir()
 
         with (
             patch.object(post_dry_run_module.constants, "PRODUCTS_DIR", tmp_path),
@@ -98,3 +100,17 @@ class TestPostDryRunHelpers:
             "Did you mean 'Modern_Dad_Sneaker_Minimalist_1'"
             in mock_abort.call_args.args[0]
         )
+
+    def test_resolve_folder_finds_nested_keyword_folder(self, tmp_path):
+        """Resolves dry-run slug inside data/products/<keyword>/ directory layout."""
+        keyword_dir = tmp_path / "my_keyword"
+        keyword_dir.mkdir()
+        expected = keyword_dir / "Modern_Dad_Sneaker_Minimalist_1"
+        expected.mkdir()
+
+        with patch.object(post_dry_run_module.constants, "PRODUCTS_DIR", tmp_path):
+            result = post_dry_run_module._resolve_folder(
+                "Modern_Dad_Sneaker_Minimalist_1"
+            )
+
+        assert result == expected

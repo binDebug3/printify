@@ -28,6 +28,8 @@ Automation for two workflows:
 - End-to-end mass production: idea generation, filtering, image generation,
     background scene and persona generation, background removal, listing text
     generation, and Printify draft creation.
+- Newly created Printify drafts are automatically appended to schedule files with
+    balanced publish-date assignment in the 4-40 day window.
 - Optional browser review UI for keep/retry/reject before background removal.
 - Local product viewer UI for browsing posted products by tile and detail page.
 - Dry-run-friendly workflow with per-design artifacts in `data/products`.
@@ -218,7 +220,7 @@ Core flow:
     mockup scene, and render final mockups.
 6. Generate listing content.
 7. Build and optionally post Printify products.
-8. Save artifacts under `data/products/<folder_slug>/`.
+8. Save artifacts under `data/products/<keyword_slug>/<folder_slug>/`.
 9. Mark matching ideas as published after successful posting.
 
 Run only the manual design review UI with existing sample folders:
@@ -236,6 +238,8 @@ Create one Printify draft from an existing generated folder:
 cd printify
 python src/mass_production/post_dry_run.py <folder_slug>
 ```
+
+`<folder_slug>` is resolved inside `data/products/<keyword_slug>/`.
 
 ## Testing
 

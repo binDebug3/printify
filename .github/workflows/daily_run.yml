@@ -70,7 +70,7 @@ jobs:
           username: ${{ secrets.MAIL_USERNAME }}
           password: ${{ secrets.MAIL_PASSWORD }}
           subject: "Printify Posting GitHub Action: ${{ github.workflow }} - ${{ job.status }}"
-          to: your-email@example.com
+          to: ${{ secrets.MAIL_USERNAME }}
           from: GitHub Actions Bot
           body: |
             The workflow ${{ github.workflow }} has finished.

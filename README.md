@@ -192,7 +192,7 @@ python src/mass_production.py
 
 Pipeline diagram:
 
-- Mermaid flowchart source is available at `flowchart.mmd`.
+- Mermaid flowchart source is available at `flowchart.svg`.
 - Open it in a Mermaid-capable viewer (for example, Markdown preview with Mermaid support)
     to inspect the full automation flow.
 

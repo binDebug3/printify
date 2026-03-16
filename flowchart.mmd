@@ -1,0 +1,92 @@
+flowchart TD
+  %% Entry scripts
+  A[run_prod_pipeline.sh] --> B[src/mass_production.py]
+  A2[post_dry_run.sh] --> B2[src/mass_production/post_dry_run.py]
+
+  %% Main pipeline orchestration
+  subgraph MAIN[Main Mass Production Pipeline]
+    B --> C[parse_args and confirm settings]
+    C --> D[run_pipeline]
+
+    D --> E[Load prompts and input files]
+    E --> E1[data/prompts/*.txt]
+    E --> E2[data/ideas.csv]
+    E --> E3[data/variant_map.json]
+
+    D --> F[Resolve credentials]
+    F --> F1[meta/gemini_api_key.txt or env GEMINI_API_KEY]
+    F --> F2[meta/removebg_api_key.txt or env REMOVEBG_API_KEY]
+    F --> F3[meta/api_token.txt and meta/shop_id.txt or env vars]
+
+    D --> G[Init clients]
+    G --> G1[GeminiClient]
+    G --> G2[RemoveBgClient]
+    G --> G3[PrintifyClient]
+
+    D --> H{For each keyword}
+    H --> I[Generate ideas from design prompt]
+    I --> J[Save initial_ideas.json]
+    J --> K[Filter and rank ideas]
+    K --> L[Save filtering.json]
+
+    L --> M{For each filtered idea}
+    M --> N[Build Idea object and folder]
+    N --> O[Generate design image]
+    O --> O1[photoshop.design_crop.crop_design_image_to_content]
+    O --> P[Save design.png and ideas.json]
+
+    P --> Q{REVIEW_DESIGNS enabled?}
+    Q -->|Yes| R[ui.design_review_ui.review_generated_designs]
+    Q -->|No| S[Use generated designs as approved]
+    R --> T[Approved design set]
+    S --> T
+
+    T --> U{For each approved idea}
+    U --> V[Generate post-design assets]
+    V --> V1[remove_bg.remove_background]
+    V1 --> V2[Save design_transparent.png]
+    V2 --> V3[Gemini background text and persona files]
+    V3 --> V4[create_default_color_mockup using transparent image]
+    V4 --> V5[Gemini mockup image generation]
+    V5 --> V6[crop_center_percent to mockup cropped]
+
+    U --> W[Save shared final mockup]
+    W --> W1[data/products/_all_final_mockups/*.png]
+
+    U --> X[Generate listing title, description, tags]
+    X --> X1[Save title.txt description.txt keywords.txt]
+
+    U --> Y[Build and create Printify product]
+    Y --> Y1[Select colors from ideas payload and variant map]
+    Y1 --> Y2[Upload transparent design and cropped mockup]
+    Y2 --> Y3[Write printify_upload.json]
+    Y3 --> Y4[Build payload and write printify_payload.json]
+    Y4 --> Y5[Create product and write printify_result.json]
+
+    Y5 --> Z{SCHEDULE_NEW_PRODUCTS enabled and product id exists?}
+    Z -->|Yes| Z1[schedule_updates.append_created_product_to_schedules]
+    Z1 --> Z2[data/schedule.csv]
+    Z1 --> Z3[src/schedule/auto_publish/schedule.csv]
+    Z -->|No| Z4[Skip schedule append]
+
+    H --> AA{Any successful products for keyword?}
+    AA -->|Yes| AB[mark_idea_as_published in data/ideas.csv]
+    AA -->|No| AC[Leave ideas.csv unchanged]
+  end
+
+  %% Post dry run helper flow
+  subgraph POST[Post Dry Run Helper]
+    B2 --> P1[Resolve target folder under data/products/<keyword>/<slug>]
+    P1 --> P2[Validate required artifacts]
+    P2 --> P3[ideas.json title.txt description.txt keywords.txt design_transparent.png mockup_*_cropped.png]
+    P3 --> P4[Load variant map and selected shirt colors]
+    P4 --> P5[Init PrintifyClient]
+    P5 --> P6[Upload transparent design and cropped mockup]
+    P6 --> P7[Build payload and create product]
+    P7 --> P8[Write printify_payload.json and printify_result.json]
+    P8 --> P9[Append schedules if enabled]
+  end
+
+  %% Logging and observability
+  LOG[schedule/logger_config.log_action] -. logs .-> MAIN
+  LOG -. logs .-> POST

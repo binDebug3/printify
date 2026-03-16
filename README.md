@@ -190,6 +190,12 @@ cd printify
 python src/mass_production.py
 ```
 
+Pipeline diagram:
+
+- Mermaid flowchart source is available at `flowchart.mmd`.
+- Open it in a Mermaid-capable viewer (for example, Markdown preview with Mermaid support)
+    to inspect the full automation flow.
+
 For real-time terminal logs with conda:
 
 ```bash

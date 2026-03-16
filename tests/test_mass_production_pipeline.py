@@ -584,7 +584,7 @@ class TestGeneratePostDesignAssets:
             )
 
         mock_create_default.assert_called_once_with(
-            design_path=design_path,
+            design_path=idea_folder / "design_transparent.png",
             color="Light Blue",
             output_dir=idea.folder_path,
         )

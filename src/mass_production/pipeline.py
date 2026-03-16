@@ -413,6 +413,25 @@ def _save_idea_json(idea: Idea) -> None:
     )
 
 
+def _save_final_mockup_image(idea: Idea, mockup_cropped_path: Path) -> Path:
+    """Save the final cropped mockup into the shared outputs directory.
+
+    Args:
+        idea: Idea payload object.
+        mockup_cropped_path: Path to the final cropped mockup image.
+
+    Returns:
+        Destination path for the saved shared mockup image.
+    """
+    constants.ALL_FINAL_MOCKUPS_DIR.mkdir(parents=True, exist_ok=True)
+    destination_path: Path = (
+        constants.ALL_FINAL_MOCKUPS_DIR / f"{slugify_title(idea.title)}.png"
+    )
+    write_bytes(destination_path, mockup_cropped_path.read_bytes())
+    log_action(f"Saved final mockup for '{idea.title}' to '{cut(destination_path)}'")
+    return destination_path
+
+
 def _generate_design_image(
     idea: Idea,
     prompts: dict[str, str],
@@ -838,6 +857,7 @@ def run_pipeline(
                     context=context,
                     ideas_per_keyword=constants.IDEAS_PER_KEYWORD,
                 )
+                write_json(keyword_products_dir / "initial_ideas.json", raw_ideas)
                 filtered_ideas, filter_metadata = _filter_ideas_for_keyword(
                     gemini=gemini,
                     filter_prompt=prompts["filter_design_descriptions"],
@@ -992,6 +1012,10 @@ def run_pipeline(
                             design_bytes=design_bytes,
                             dashboard=dashboard,
                         )
+                    )
+                    _save_final_mockup_image(
+                        idea=idea,
+                        mockup_cropped_path=mockup_cropped_path,
                     )
 
                     _safe_dashboard_call(

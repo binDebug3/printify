@@ -167,6 +167,11 @@ class TestRunPipeline:
             ),
             patch.object(
                 pipeline_module,
+                "_save_final_mockup_image",
+                return_value=tmp_path / "saved_final.png",
+            ) as mock_save_final_mockup,
+            patch.object(
+                pipeline_module,
                 "_generate_listing_fields",
                 return_value=("Listing Title", "Description", ["tag one", "tag two"]),
             ),
@@ -185,6 +190,10 @@ class TestRunPipeline:
         mock_append_schedule.assert_called_once_with(
             product_title="Listing Title 1",
             product_id="prod-1",
+        )
+        mock_save_final_mockup.assert_called_once_with(
+            idea=idea,
+            mockup_cropped_path=mockup_path,
         )
         mock_mark.assert_called_once_with(
             path=constants.IDEAS_CSV_PATH,
@@ -610,6 +619,38 @@ class TestGeneratePostDesignAssets:
                 design_path=design_path,
                 design_bytes=b"raw-design",
             )
+
+
+class TestSaveFinalMockupImage:
+    """Tests for persisting final mockups in the shared output folder."""
+
+    def test_saves_to_all_final_mockups_with_slugified_idea_name(self, tmp_path: Path):
+        """Writes the final cropped mockup bytes to the shared final-mockups directory."""
+        idea = Idea(
+            keyword="alpha",
+            original_title="Alpha Shirt",
+            title="Alpha Shirt 1",
+            folder_name="Alpha_Shirt_1",
+            folder_path=tmp_path / "Alpha_Shirt_1",
+            payload={},
+        )
+        mockup_cropped_path = tmp_path / "mockup_(Light_Blue)_cropped.png"
+        mockup_cropped_path.write_bytes(b"mockup-bytes")
+        all_final_mockups_dir = tmp_path / "_all_final_mockups"
+
+        with patch.object(
+            pipeline_module.constants,
+            "ALL_FINAL_MOCKUPS_DIR",
+            all_final_mockups_dir,
+        ):
+            destination_path = pipeline_module._save_final_mockup_image(
+                idea=idea,
+                mockup_cropped_path=mockup_cropped_path,
+            )
+
+        assert destination_path == all_final_mockups_dir / "Alpha_Shirt_1.png"
+        assert destination_path.exists()
+        assert destination_path.read_bytes() == b"mockup-bytes"
 
 
 class TestGenerateListingFields:

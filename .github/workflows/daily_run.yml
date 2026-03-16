@@ -46,3 +46,39 @@ jobs:
           else
             echo "_No log file was generated (script may have failed to start)._" >> $GITHUB_STEP_SUMMARY
           fi
+
+      - name: Read log for email
+        if: always()
+        id: read_log
+        run: |
+          LOG_FILE="src/schedule/auto_publish/auto_publish.log"
+          if [ -f "$LOG_FILE" ]; then
+            # Read log and escape it for GitHub Action outputs
+            echo "log_content<<EOF" >> $GITHUB_OUTPUT
+            cat "$LOG_FILE" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          else
+            echo "log_content=No log file found." >> $GITHUB_OUTPUT
+          fi
+
+      - name: Send Email Notification
+        if: always()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          subject: "Printify Posting GitHub Action: ${{ github.workflow }} - ${{ job.status }}"
+          to: your-email@example.com
+          from: GitHub Actions Bot
+          body: |
+            The workflow ${{ github.workflow }} has finished.
+            
+            Status: ${{ job.status }}
+            Commit: ${{ github.sha }}
+            Repository: ${{ github.repository }}
+            View details: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+            
+            --- SCRIPT LOGS ---
+            ${{ steps.read_log.outputs.log_content }}

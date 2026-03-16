@@ -8,6 +8,7 @@ AUTOMATION_ROOT: Path = Path(__file__).resolve().parents[3]
 DATA_DIR: Path = AUTOMATION_ROOT / "data"
 PROMPTS_DIR: Path = DATA_DIR / "prompts"
 PRODUCTS_DIR: Path = DATA_DIR / "products"
+ALL_FINAL_MOCKUPS_DIR: Path = PRODUCTS_DIR / "_all_final_mockups"
 META_DIR: Path = AUTOMATION_ROOT / "meta"
 
 IDEAS_CSV_PATH: Path = DATA_DIR / "ideas.csv"

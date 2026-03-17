@@ -14,12 +14,12 @@ Automation for two workflows:
 ## Table Of Contents
 
 - [Features](#features)
-- [File Architecture](#file-architecture)
 - [Requirements](#requirements)
 - [Installation](#installation)
 - [Usage](#usage)
 - [Testing](#testing)
 - [Configuration](#configuration)
+- [File Architecture](#file-architecture)
 - [License](#license)
 
 ## Features
@@ -36,76 +36,6 @@ Automation for two workflows:
 - Shirt mockup selection now balances readability with analogous color harmony,
     favoring pairings such as lighter blues on darker blues over flat same-value matches.
 
-## File Architecture
-
-```text
-data/
-    base_mockups/
-    products/
-    prompts/
-    ideas.csv
-    product_ids.txt
-    schedule.csv
-    variant_map.json
-meta/
-printify/
-    src/
-        mass_production.py
-        mass_production/
-            clients/
-                add_etsy_mockup.py
-                etsy_client.py
-                gemini_client.py
-                printify_client.py
-            photoshop/
-                design_crop.py
-                io_utils.py
-                remove_bg.py
-            ui/
-                design_review_ui.py
-                progress_dashboard.py
-                show_products.py
-            constants.py
-            models.py
-            pipeline.py
-            post_dry_run.py
-        printify_api_tools/
-            decide_bbox.py
-            get_base_mockups.py
-            get_product_info.py
-            get_variant_info.py
-            publish_product.py
-        schedule/
-            logger_config.py
-            notification.py
-            publish.py
-            tools.py
-        tests/
-            manual/
-    tests/
-        __init__.py
-        conftest.py
-        artifacts/
-        manual/
-            manual_background_visual.py
-            manual_design_crop.py
-            manual_test_paste_design.py
-            manual_test_progress_ui.py
-            manual_review_ui_runner.py
-            manual_show_products_from_data_images.py
-        test_add_etsy_mockup.py
-        test_design_crop.py
-        test_design_review_ui.py
-        test_get_base_mockups.py
-        test_mass_production_cli.py
-        test_mass_production_clients.py
-        test_mass_production_io_utils.py
-        test_mass_production_pipeline.py
-        test_mass_production_post_dry_run.py
-        test_notification.py
-        test_publish.py
-        test_tools.py
-```
 
 ## Requirements
 
@@ -113,18 +43,8 @@ printify/
 - A Printify account, shop ID, and API token.
 - A connected Etsy sales channel in Printify for publishing.
 - Gemini API access for mass production.
-- remove.bg API access for transparent artwork generation.
 - Gmail API credentials if email notifications are enabled.
 
-Primary Python dependencies:
-
-- pandas
-- requests
-- pillow
-- google-genai
-- google-auth
-- google-auth-oauthlib
-- google-api-python-client
 
 ## Installation
 
@@ -132,15 +52,8 @@ Using conda:
 
 ```bash
 cd printify
-conda env create -f requirements.yml
+conda env create -f requirements.yml --p printify-automation
 conda activate printify-automation
-```
-
-If you already have an environment and just want the packages:
-
-```bash
-cd printify
-pip install pandas requests pillow google-genai google-auth google-auth-oauthlib google-api-python-client
 ```
 
 ## Usage
@@ -212,12 +125,6 @@ Pipeline diagram:
 - Open it in a Mermaid-capable viewer (for example, Markdown preview with Mermaid support)
     to inspect the full automation flow.
 
-For real-time terminal logs with conda:
-
-```bash
-cd printify
-conda run --no-capture-output -n lila python -u .\src\mass_production.py --real-run
-```
 
 Manual design review is controlled by `REVIEW_DESIGNS` in
 `src/mass_production/constants.py`.
@@ -225,11 +132,6 @@ Manual design review is controlled by `REVIEW_DESIGNS` in
 Live desktop progress dashboard is controlled by `ENABLE_PROGRESS_UI` in
 `src/mass_production/constants.py`.
 
-Interrupt behavior:
-
-- Press `Ctrl+C` once to stop the pipeline gracefully.
-- Manual design review and the progress dashboard now close their local UI servers
-    and windows before process exit to avoid socket/thread teardown errors.
 
 Core flow:
 
@@ -281,26 +183,83 @@ python -m pytest tests/manual/manual_design_crop.py::test_manual_crop_random_des
 
 ## Configuration
 
-The project expects shared data and secrets outside `printify/`, matching the
-architecture above.
-
-Required data and secrets:
-
-- `../data/ideas.csv`
-- `../data/schedule.csv`
-- `../data/variant_map.json`
-- `../data/prompts/*.txt`
-- `../meta/api_token.txt`
-- `../meta/shop_id.txt`
-- `../meta/gemini_api_key.txt`
-- `../meta/removebg_api_key.txt`
-- `../meta/etsy_api_key.json`
-- `../meta/email_address.txt`
-- `../meta/cal_credentials.json`
+The project expects shared data and secrets outside `printify/`, as implied by the constants.py 
+file.
 
 Most runtime behavior is configured in `src/mass_production/constants.py`
 (examples: `REVIEW_DESIGNS`, `IDEAS_PER_KEYWORD`,
 `FILTERED_IDEAS_PER_KEYWORD`, and `BACKGROUND_REMOVAL_MODE`).
+
+
+## File Architecture
+
+```text
+data/
+    base_mockups/
+    products/
+    prompts/
+    ideas.csv
+    product_ids.txt
+    schedule.csv
+    variant_map.json
+meta/
+printify/
+    src/
+        mass_production.py
+        mass_production/
+            clients/
+                add_etsy_mockup.py
+                etsy_client.py
+                gemini_client.py
+                printify_client.py
+            photoshop/
+                design_crop.py
+                io_utils.py
+                remove_bg.py
+            ui/
+                design_review_ui.py
+                progress_dashboard.py
+                show_products.py
+            constants.py
+            models.py
+            pipeline.py
+            post_dry_run.py
+        printify_api_tools/
+            decide_bbox.py
+            get_base_mockups.py
+            get_product_info.py
+            get_variant_info.py
+            publish_product.py
+        schedule/
+            logger_config.py
+            notification.py
+            publish.py
+            tools.py
+    tests/
+        __init__.py
+        conftest.py
+        artifacts/
+        manual/
+            manual_background_visual.py
+            manual_design_crop.py
+            manual_test_paste_design.py
+            manual_test_progress_ui.py
+            manual_review_ui_runner.py
+            manual_show_products_from_data_images.py
+        test_add_etsy_mockup.py
+        test_design_crop.py
+        test_design_review_ui.py
+        test_get_base_mockups.py
+        test_mass_production_cli.py
+        test_mass_production_clients.py
+        test_mass_production_io_utils.py
+        test_mass_production_pipeline.py
+        test_mass_production_post_dry_run.py
+        test_notification.py
+        test_publish.py
+        test_tools.py
+```
+
 
 ## Contributors
 

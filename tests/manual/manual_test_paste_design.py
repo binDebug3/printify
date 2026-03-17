@@ -126,7 +126,7 @@ def main() -> None:
     )
     output_path = create_default_color_mockup(
         design_path=design_path,
-        color=color,
+        mockup_shirt=color,
         output_dir=output_dir,
     )
 

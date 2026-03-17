@@ -5,9 +5,12 @@ channels:
 dependencies:
   - python>=3.10
   - pandas
+  - numpy
   - requests
+  - scikit-learn
   - pip
   - pip:
+      - colorspacious
       - google-auth
       - google-auth-oauthlib
       - google-api-python-client

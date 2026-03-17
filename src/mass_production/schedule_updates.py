@@ -18,6 +18,12 @@ SCHEDULE_FIELD_NAMES: List[str] = [
     "publish_status",
     "publish_date",
 ]
+AUTO_PUBLISH_FIELD_NAMES: List[str] = [
+    "nick_name",
+    "product_id",
+    "publish_status",
+    "publish_date",
+]
 DATE_FORMAT: str = "%m/%d/%Y"
 MIN_PUBLISH_OFFSET_DAYS: int = 4
 MAX_PUBLISH_OFFSET_DAYS: int = 40
@@ -45,17 +51,18 @@ def _read_rows(path: Path) -> List[Dict[str, str]]:
         return [dict(row) for row in reader]
 
 
-def _append_row(path: Path, row: Dict[str, str]) -> None:
+def _append_row(path: Path, row: Dict[str, str], field_names: List[str]) -> None:
     """Append one row to a schedule CSV, creating it with headers if needed.
 
     Args:
         path: CSV file path.
         row: Row payload.
+        field_names: CSV column names used to write this row.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     needs_header: bool = (not path.exists()) or path.stat().st_size == 0
     with open(path, "a", encoding="utf-8", newline="") as file_handle:
-        writer = csv.DictWriter(file_handle, fieldnames=SCHEDULE_FIELD_NAMES)
+        writer = csv.DictWriter(file_handle, fieldnames=field_names)
         if needs_header:
             writer.writeheader()
         writer.writerow(row)
@@ -157,7 +164,17 @@ def append_created_product_to_schedules(product_title: str, product_id: str) -> 
         "publish_status": "False",
         "publish_date": chosen_publish_date,
     }
+    auto_schedule_row: Dict[str, str] = {
+        "nick_name": normalized_title,
+        "product_id": normalized_product_id,
+        "publish_status": "False",
+        "publish_date": chosen_publish_date,
+    }
 
-    _append_row(DATA_SCHEDULE_PATH, schedule_row)
-    _append_row(AUTO_PUBLISH_SCHEDULE_PATH, schedule_row)
+    _append_row(DATA_SCHEDULE_PATH, schedule_row, SCHEDULE_FIELD_NAMES)
+    _append_row(
+        AUTO_PUBLISH_SCHEDULE_PATH,
+        auto_schedule_row,
+        AUTO_PUBLISH_FIELD_NAMES,
+    )
     return True

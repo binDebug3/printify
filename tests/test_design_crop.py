@@ -115,7 +115,7 @@ class TestCreateDefaultColorMockup:
         try:
             output_path = design_crop_module.create_default_color_mockup(
                 design_path=design_path,
-                color="Light Blue",
+                mockup_shirt=mockup_path,
                 output_dir=output_dir,
             )
         finally:
@@ -155,7 +155,7 @@ class TestCreateDefaultColorMockup:
         try:
             output_path = design_crop_module.create_default_color_mockup(
                 design_path=design_path,
-                color="Light Blue",
+                mockup_shirt=mockup_path,
                 output_dir=output_dir,
             )
         finally:

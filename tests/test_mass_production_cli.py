@@ -38,7 +38,10 @@ class TestMain:
     def test_main_configures_path_and_forwards_args_to_pipeline(self):
         """Forwards only dry_run to pipeline and uses constants for display settings."""
         fake_run_pipeline = MagicMock()
-        fake_pipeline_module = SimpleNamespace(run_pipeline=fake_run_pipeline)
+        fake_orchestrator = MagicMock()
+        fake_orchestrator.run_pipeline = fake_run_pipeline
+        fake_orchestrator_class = MagicMock(return_value=fake_orchestrator)
+        fake_pipeline_module = SimpleNamespace(Orchestrator=fake_orchestrator_class)
         fake_args = SimpleNamespace(dry_run=False)
         fake_constants_module = SimpleNamespace(
             REVIEW_DESIGNS=False,
@@ -81,14 +84,16 @@ class TestMain:
                 "dry run": False,
             }
         )
-        fake_run_pipeline.assert_called_once_with(
-            dry_run=False,
-        )
+        fake_run_pipeline.assert_called_once_with()
+        fake_orchestrator_class.assert_called_once_with(dry_run=False)
 
     def test_main_aborts_when_user_rejects_settings(self):
         """Stops before pipeline execution when runtime setting confirmation is rejected."""
         fake_run_pipeline = MagicMock()
-        fake_pipeline_module = SimpleNamespace(run_pipeline=fake_run_pipeline)
+        fake_orchestrator = MagicMock()
+        fake_orchestrator.run_pipeline = fake_run_pipeline
+        fake_orchestrator_class = MagicMock(return_value=fake_orchestrator)
+        fake_pipeline_module = SimpleNamespace(Orchestrator=fake_orchestrator_class)
         fake_args = SimpleNamespace(dry_run=True)
         fake_constants_module = SimpleNamespace(
             REVIEW_DESIGNS=True,
@@ -116,4 +121,5 @@ class TestMain:
             cli_module.main()
 
         mock_configure.assert_called_once_with()
+        fake_orchestrator_class.assert_not_called()
         fake_run_pipeline.assert_not_called()

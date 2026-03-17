@@ -5,3 +5,9 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "my_package"
 version = "0.1.0"
+
+[tool.pytest.ini_options]
+filterwarnings = [
+	"ignore::sklearn.exceptions.ConvergenceWarning",
+	"ignore:KMeans is known to have a memory leak:UserWarning",
+]

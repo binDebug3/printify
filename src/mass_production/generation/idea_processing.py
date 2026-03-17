@@ -42,7 +42,6 @@ def normalize_idea_payload(raw: dict[str, Any], keyword: str) -> dict[str, Any]:
         "typography": str(raw.get("typography", "")).strip(),
         "composition": str(raw.get("composition", "")).strip(),
         "background": str(raw.get("background", "")).strip(),
-        "mockup_color": str(raw.get("mockup_color", "")).strip(),
         "design_colors": [
             str(c).strip() for c in raw.get("design_colors", []) if str(c).strip()
         ],

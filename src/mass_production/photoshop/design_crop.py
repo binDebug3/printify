@@ -246,7 +246,7 @@ def _to_camel_case(value: str) -> str:
 
 def create_default_color_mockup(
     design_path: Path,
-    color: str,
+    mockup_shirt: Path,
     output_dir: Path,
 ) -> Path:
     """Create a default color mockup by pasting a design into a saved bbox.
@@ -258,7 +258,7 @@ def create_default_color_mockup(
 
     Args:
         design_path: Path to the design image.
-        color: Shirt color name used to locate base mockup image.
+        mockup_shirt: Name of the shirt color to select the base mockup.
         output_dir: Directory where the composed mockup is saved.
 
     Returns:
@@ -269,27 +269,14 @@ def create_default_color_mockup(
         ValueError: If bbox JSON is invalid.
     """
     log_action(
-        f"Creating default mockup for color='{color}' from design='{cut(design_path)}'"
+        f"Creating default mockup for color='{mockup_shirt.stem}' from design='{cut(design_path)}'"
     )
     if not design_path.exists():
         raise FileNotFoundError(f"Design image not found: '{design_path}'")
 
-    color_camel = _to_camel_case(color)
-
-    mockup_dir_candidates = [
-        BASE_MOCKUPS_DIR,
-        BASE_MOCKUPS_DIR.parent / "base_mockups",
-    ]
-    mockup_path: Optional[Path] = None
-    for candidate_dir in mockup_dir_candidates:
-        candidate_path = candidate_dir / f"{color_camel}.png"
-        if candidate_path.exists():
-            mockup_path = candidate_path
-            break
-
-    if mockup_path is None:
+    if mockup_shirt is None:
         raise FileNotFoundError(
-            f"No base mockup found for color='{color}' in dir {mockup_dir_candidates}"
+            f"No base mockup found for color='{mockup_shirt}' in dir {mockup_shirt.parent}"
         )
 
     bbox_path = BASE_MOCKUPS_DIR / "bbox.json"
@@ -317,10 +304,10 @@ def create_default_color_mockup(
         raise ValueError("bbox width and height must be positive")
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    output_path = output_dir / f"mockup_default_{color_camel}.png"
+    output_path = output_dir / f"mockup_default_{mockup_shirt.stem}.png"
 
     with (
-        Image.open(mockup_path) as mockup_image,
+        Image.open(mockup_shirt) as mockup_image,
         Image.open(design_path) as design_image,
     ):
         mockup_rgba: Image.Image = mockup_image.convert("RGBA")

@@ -33,7 +33,7 @@ from generation.idea_processing import (
 )
 from generation.assets import (
     generate_design_image,
-    _generate_post_design_assets,
+    generate_post_design_assets,
 )
 from generation.listing import generate_listing_fields, select_colors
 from photoshop.remove_bg import RemoveBgClient
@@ -50,12 +50,16 @@ class Orchestrator(object):
     def __init__(self, dry_run: bool = constants.DEFAULT_DRY_RUN):
         self.dry_run = dry_run
         self.dashboard = None
-        self.gemini_key: str = require_setting("GEMINI_API_KEY", constants.GEMINI_API_KEY_PATH)
-        self.background_removal_mode: str = constants.BACKGROUND_REMOVAL_MODE.strip().lower()
+        self.gemini_key: str = require_setting(
+            "GEMINI_API_KEY", constants.GEMINI_API_KEY_PATH
+        )
+        self.background_removal_mode: str = (
+            constants.BACKGROUND_REMOVAL_MODE.strip().lower()
+        )
         self.removebg_key: str = ""
         self.get_required_constants()
         self.set_up_api_clients()
-        
+
     def get_required_constants(self):
         """
         Load and validate required constants from the configuration.
@@ -70,9 +74,9 @@ class Orchestrator(object):
         self.printify_shop_id: str = require_setting(
             "PRINTIFY_SHOP_ID", constants.PRINTIFY_SHOP_ID_PATH
         )
-    
+
     def safe_dashboard_call(
-        self, 
+        self,
         method_name: str,
         *args: Any,
     ) -> None:
@@ -90,7 +94,7 @@ class Orchestrator(object):
             method(*args)
         except Exception as exc:  # noqa: BLE001
             log_action(f"Dashboard update failed for method '{method_name}': {exc}")
-            
+
     def set_up_api_clients(self):
         """
         Set up API clients for Gemini, Remove.bg, and Printify using configuration settings.
@@ -125,29 +129,28 @@ class Orchestrator(object):
             dry_run=self.dry_run,
             retries=constants.MAX_PRINTIFY_RETRIES,
         )
-        
+
     def set_up_prompting(self):
         """
         Load and store prompts for idea generation, filtering, design, and listing creation.
         """
         self.prompts: Dict[str, str] = load_prompts()
         self.keywords, self.contexts = read_keywords_from_ideas_csv(
-            constants.IDEAS_CSV_PATH, 
-            limit=constants.MAX_KEYWORDS_PER_RUN
+            constants.IDEAS_CSV_PATH, limit=constants.MAX_KEYWORDS_PER_RUN
         )
         self.color_to_ids: Dict[str, List[int]] = load_color_to_ids_map(
             constants.VARIANT_MAP_PATH
         )
-        
+
     def generate_filtered_ideas(
-        self, 
-        keyword: str, 
-        context: str, 
+        self,
+        keyword: str,
+        context: str,
     ) -> None:
         """
-        Generate and filter ideas for a given keyword and context, 
+        Generate and filter ideas for a given keyword and context,
         and update the dashboard with progress.
-        
+
         Args:
             keyword: The keyword for which to generate ideas.
             context: Additional context to inform idea generation.
@@ -176,7 +179,7 @@ class Orchestrator(object):
             error_message: str = f"Failed to generate ideas for '{keyword}': {exc}"
             log_action(error_message)
             self.safe_dashboard_call("add_error", error_message)
-            
+
     def build_idea(
         self,
         idea_number: int,
@@ -185,7 +188,7 @@ class Orchestrator(object):
     ) -> None:
         """
         Build an Idea object from raw idea data and update the dashboard with progress.
-        
+
         Args:
             idea_number: The sequential number of the idea being processed for the current keyword.
             keyword: The keyword associated with the idea.
@@ -202,14 +205,14 @@ class Orchestrator(object):
         )
         self.idea.folder_path.mkdir(parents=True, exist_ok=True)
         save_idea_json(self.idea)
-    
+
     def generate_design(
-        self, 
+        self,
         idea_index: int,
     ) -> None:
         """
         Generate a design image for the current idea and update the dashboard with progress.
-        
+
         Args:
             idea_index: The index of the idea in the list of filtered ideas for the current word.
         """
@@ -230,25 +233,24 @@ class Orchestrator(object):
                 "retry_count": 0,
             }
         )
-        
+
     def generate_mockup(
-        self, 
-        approved_index: int, 
-        approved_ideas_count: int, 
+        self,
+        approved_index: int,
+        approved_ideas_count: int,
         design_entry: dict[str, Any],
     ) -> None:
         """
         Generate a mockup image for the approved design and update the dashboard with progress.
-        
+
         Args:
-            approved_index: The index of the approved design in the list of approved designs for 
+            approved_index: The index of the approved design in the list of approved designs for
                 the current keyword.
             approved_ideas_count: The total number of approved designs for the current keyword.
-            design_entry: A dictionary containing the idea and design information for the approved 
+            design_entry: A dictionary containing the idea and design information for the approved
                 design.
         """
         idea: Idea = design_entry["idea"]
-        design_path: Path = design_entry["design_path"]
         design_bytes: bytes = design_entry["design_bytes"]
         self.safe_dashboard_call(
             "set_idea_name",
@@ -261,12 +263,11 @@ class Orchestrator(object):
             "Generating transparent image and mockups",
         )
         self.transparent_path, _, self.mockup_cropped_path = (
-            _generate_post_design_assets(
+            generate_post_design_assets(
                 idea=idea,
                 prompts=self.prompts,
                 gemini=self.gemini,
                 remove_bg_client=self.remove_bg_client,
-                design_path=design_path,
                 design_bytes=design_bytes,
                 dashboard=self.dashboard,
             )
@@ -275,15 +276,15 @@ class Orchestrator(object):
             idea=idea,
             mockup_cropped_path=self.mockup_cropped_path,
         )
-        
+
     def update_timer(
         self,
         keyword: str,
     ) -> None:
         """
-        Update timing metrics for the current iteration and log the estimated remaining time 
+        Update timing metrics for the current iteration and log the estimated remaining time
         for the keyword.
-        
+
         Args:
             keyword: The keyword associated with the current iteration, used for logging context.
         """
@@ -297,9 +298,7 @@ class Orchestrator(object):
             estimated_total_seconds - elapsed_time_seconds,
             0.0,
         )
-        iteration_duration_seconds: float = (
-            time.monotonic() - self.iteration_start_time
-        )
+        iteration_duration_seconds: float = time.monotonic() - self.iteration_start_time
         log_action(
             "Filtered-idea timing | "
             f"keyword='{keyword}' | "
@@ -310,7 +309,7 @@ class Orchestrator(object):
             f"estimated_remaining_seconds={estimated_remaining_seconds:.1f} | "
             f"estimated_total_seconds={estimated_total_seconds:.1f}"
         )
-        
+
     def log_keyword_start(
         self,
         keyword: str,
@@ -318,7 +317,7 @@ class Orchestrator(object):
     ) -> None:
         """
         Log the start of processing for a new keyword and update the dashboard stage.
-        
+
         Args:
             keyword: The keyword that is starting processing.
             idx: The index of the keyword in the list of keywords being processed.
@@ -328,26 +327,26 @@ class Orchestrator(object):
         self.safe_dashboard_call("set_keyword", keyword, idx, len(self.keywords))
         self.safe_dashboard_call("set_stage", "Generating and filtering ideas")
         log_action(f"Processing keyword ({idx}/{len(self.keywords)}): '{keyword}'")
-        
+
     def log_design_error(
-        self, 
+        self,
         keyword: str,
         exc: Exception,
     ) -> None:
         """
-        Log an error that occurred during design generation and update the dashboard with 
+        Log an error that occurred during design generation and update the dashboard with
         the error message.
-        
+
         Args:
             keyword: The keyword associated with the idea that failed to generate a design.
             exc: The exception that was raised during design generation.
         """
         self.iteration_status = f"failed: {exc}"
-        error_message = (f"Failed processing idea for keyword '{keyword}': {exc}")
+        error_message = f"Failed processing idea for keyword '{keyword}': {exc}"
         log_action(error_message)
         self.safe_dashboard_call("add_error", error_message)
         self.safe_dashboard_call("mark_idea_finished", False)
-        
+
     def review_design(
         self,
         keyword,
@@ -355,10 +354,10 @@ class Orchestrator(object):
         """
         Run the manual design review process for the generated designs of a keyword, and update the
         dashboard with the results.
-        
+
         Args:
             keyword: The keyword associated with the designs being reviewed.
-            
+
         Returns:
             True if the design review process completed successfully, False if it failed.
         """
@@ -374,29 +373,31 @@ class Orchestrator(object):
                 max_retries=constants.DESIGN_REVIEW_MAX_RETRIES,
                 dashboard=self.dashboard,
             )
-            rejected_count: int = len(self.generated_designs) - len(self.approved_designs)
+            rejected_count: int = len(self.generated_designs) - len(
+                self.approved_designs
+            )
             for _ in range(max(0, rejected_count)):
                 self.safe_dashboard_call("mark_idea_finished", False)
         except Exception as exc:  # noqa: BLE001
             success = False
-            error_message = (f"Manual design review failed for '{keyword}': {exc}")
+            error_message = f"Manual design review failed for '{keyword}': {exc}"
             log_action(error_message)
             self.safe_dashboard_call("add_error", error_message)
             for _ in range(len(self.generated_designs)):
                 self.safe_dashboard_call("mark_idea_finished", False)
         return success
-    
+
     def upload_image(
-        self, 
-        idea: Idea, 
+        self,
+        idea: Idea,
     ) -> Dict[str, Any]:
         """
-        Upload the generated design and mockup images to Printify and save the upload results, 
-        while updating the dashboard stage and handling any errors that occur during the upload 
+        Upload the generated design and mockup images to Printify and save the upload results,
+        while updating the dashboard stage and handling any errors that occur during the upload
         process.
-            
+
         Returns:
-            A dictionary containing the results of the image upload operations, which may include 
+            A dictionary containing the results of the image upload operations, which may include
             information about the uploaded design and mockup images.
         """
         self.safe_dashboard_call(
@@ -418,9 +419,9 @@ class Orchestrator(object):
                 },
             )
         return uploaded_image
-    
+
     def build_printify_payload(
-        self, 
+        self,
     ) -> None:
         """
         Build the payload for creating a Printify product based on the idea and generated assets,
@@ -450,19 +451,16 @@ class Orchestrator(object):
             selected_colors=selected_colors,
             color_to_ids=self.color_to_ids,
             design_transparent_path=self.transparent_path,
-            uploaded_image_id=uploaded_image.get("id")
-            if uploaded_image
-            else None,
+            uploaded_image_id=uploaded_image.get("id") if uploaded_image else None,
             base_price_usd=sampled_price,
-            
         )
         write_json(self.idea.folder_path / "printify_payload.json", self.payload)
-    
+
     def post_to_printify(
         self,
     ) -> None:
         """
-        Post the created product payload to Printify to create a draft product, and handle 
+        Post the created product payload to Printify to create a draft product, and handle
         any errors that occur during the product creation process.
         """
         result: Dict[str, Any] = self.printify_client.create_product(self.payload)
@@ -476,25 +474,23 @@ class Orchestrator(object):
                 )
                 if schedule_added:
                     log_action(
-                        f"Scheduled product '{created_product_id}' "
-                        f"for auto publish"
+                        f"Scheduled product '{created_product_id}' for auto publish"
                     )
             except Exception as exc:  # noqa: BLE001
                 log_action(
-                    f"Schedule update failed for product '{created_product_id}': "
-                    f"{exc}"
+                    f"Schedule update failed for product '{created_product_id}': {exc}"
                 )
         self.successful_products_count += 1
         self.safe_dashboard_call("mark_idea_finished", True)
         log_action(f"Completed idea '{self.idea.title}'")
-        
+
     def generate_all_designs(
-        self, 
+        self,
         keyword: str,
     ) -> None:
         """
         Generate designs for all filtered ideas of the current keyword, and update the dashboard
-        
+
         Args:
             keyword: The keyword associated with the ideas for which to generate designs.
         """
@@ -502,7 +498,7 @@ class Orchestrator(object):
             idea_number: int = idea_index + 1
             self.iteration_start_time: float = time.monotonic()
             self.iteration_status: str = "success"
-            
+
             try:
                 self.build_idea(idea_number, keyword, raw_idea)
                 self.generate_design(idea_index)
@@ -511,15 +507,15 @@ class Orchestrator(object):
                 continue
             finally:
                 self.update_timer(keyword)
-                
+
     def post_all_products(
         self,
         keyword: str,
     ) -> None:
         """
-        Post all approved designs for the current keyword to Printify, and handle any errors that 
+        Post all approved designs for the current keyword to Printify, and handle any errors that
         occur during the posting process.
-        
+
         Args:
             keyword: The keyword associated with the approved designs to post.
         """
@@ -529,22 +525,22 @@ class Orchestrator(object):
                 self.generate_mockup(approved_index, approved_ideas_count, design_entry)
                 self.build_printify_payload()
                 self.post_to_printify()
-            
+
             except Exception as exc:  # noqa: BLE001
-                error_message = (f"Failed processing idea for keyword '{keyword}': {exc}")
+                error_message = f"Failed processing idea for keyword '{keyword}': {exc}"
                 log_action(error_message)
                 self.safe_dashboard_call("add_error", error_message)
                 self.safe_dashboard_call("mark_idea_finished", False)
                 continue
-            
+
     def record_post(
         self,
         keyword: str,
     ) -> None:
         """
-        After posting products for a keyword, update the ideas.csv file to mark the idea as 
+        After posting products for a keyword, update the ideas.csv file to mark the idea as
         published, and log the result of the update operation.
-        
+
         Args:
             keyword: The keyword associated with the idea to mark as published.
         """
@@ -555,11 +551,13 @@ class Orchestrator(object):
                 shirt_count=self.successful_products_count,
             )
             if not updated:
-                log_action(f"ideas.csv update skipped after publishing keyword '{keyword}'")
-                
+                log_action(
+                    f"ideas.csv update skipped after publishing keyword '{keyword}'"
+                )
+
     def start_dashboard(self) -> None:
         """
-        Initialize and start the progress dashboard for the mass production pipeline, and handle 
+        Initialize and start the progress dashboard for the mass production pipeline, and handle
         any errors that occur during dashboard initialization.
         """
         self.dashboard: Optional[Any] = create_progress_dashboard()
@@ -581,10 +579,12 @@ class Orchestrator(object):
 
             self.start_dashboard()
             self.total_ideas_scheduled: int = 0
-            for idx, (keyword, context) in enumerate(zip(self.keywords, self.contexts), start=1):
+            for idx, (keyword, context) in enumerate(
+                zip(self.keywords, self.contexts), start=1
+            ):
                 self.log_keyword_start(keyword, idx)
                 self.successful_products_count: int = 0
-                
+
                 self.generate_filtered_ideas(keyword, context)
                 if len(self.filtered_ideas) == 0:
                     continue
@@ -593,7 +593,7 @@ class Orchestrator(object):
                 self.n_ideas: int = len(self.filtered_ideas)
                 self.loop_start_time: float = time.monotonic()
                 self.completed_iterations: int = 0
-                
+
                 self.generate_all_designs(keyword)
                 if not self.generated_designs:
                     log_action(f"No designs generated for keyword '{keyword}'")
@@ -613,7 +613,7 @@ class Orchestrator(object):
             message: str = "Pipeline interrupted by user (Ctrl+C)"
             log_action(message)
             self.safe_dashboard_call("add_error", message)
-        
+
         finally:
             final_stage: str = "Interrupted" if interrupted else "Completed"
             try:

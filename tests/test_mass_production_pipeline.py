@@ -43,228 +43,61 @@ def disable_progress_ui() -> Iterator[None]:
 class TestRunPipeline:
     """Tests for run_pipeline."""
 
+    @staticmethod
+    def _build_orchestrator() -> pipeline_module.Orchestrator:
+        """Create an Orchestrator instance without running constructor side effects."""
+        orchestrator = pipeline_module.Orchestrator.__new__(
+            pipeline_module.Orchestrator
+        )
+        orchestrator.dashboard = None
+        return orchestrator
+
     def test_logs_and_prints_when_no_unused_keywords_exist(self):
         """Stops early with a user-visible message when ideas.csv has no used=false rows."""
-        with (
-            patch.object(pipeline_module, "load_prompts", return_value={}),
-            patch.object(
-                pipeline_module,
-                "read_keywords_from_ideas_csv",
-                return_value=([], []),
-            ),
-            patch.object(
-                pipeline_module,
-                "load_color_to_ids_map",
-                return_value={"pepper": [101]},
-            ),
-            patch.object(pipeline_module, "log_action") as mock_log,
-            patch("builtins.print") as mock_print,
-        ):
-            pipeline_module.run_pipeline(dry_run=True)
+        orchestrator = self._build_orchestrator()
+
+        def _set_up_prompting() -> None:
+            orchestrator.keywords = []
+            orchestrator.contexts = []
+
+        orchestrator.set_up_prompting = _set_up_prompting
+        orchestrator.start_dashboard = MagicMock()
+        orchestrator.safe_dashboard_call = MagicMock()
+
+        with patch.object(pipeline_module, "log_action") as mock_log:
+            orchestrator.run_pipeline()
 
         message = "No ideas marked used=false found in ideas.csv"
         mock_log.assert_called_with(message)
-        mock_print.assert_called_once_with(message)
+        orchestrator.start_dashboard.assert_not_called()
 
     def test_marks_keyword_as_published_after_successful_product_creation(
-        self, tmp_path
+        self,
     ):
         """Updates ideas.csv after at least one idea for the keyword completes successfully."""
-        transparent_path = tmp_path / "design_transparent.png"
-        mockup_path = tmp_path / "mockup.png"
-        transparent_path.write_bytes(b"png")
-        mockup_path.write_bytes(b"png")
+        orchestrator = self._build_orchestrator()
+        orchestrator.successful_products_count = 2
 
-        idea = Idea(
-            keyword="alpha",
-            original_title="Alpha Shirt",
-            title="Alpha Shirt 1",
-            folder_name="Alpha_Shirt_1",
-            folder_path=tmp_path / "Alpha_Shirt_1",
-            payload={"shirt_colors": ["pepper"]},
-        )
-        mock_printify_client = MagicMock()
-        mock_printify_client.pick_base_price_usd.return_value = 29.45
-        mock_printify_client.upload_image.side_effect = [
-            {"id": "img-1"},
-            {"id": "img-2"},
-        ]
-        mock_printify_client.build_payload.return_value = {
-            "title": "Listing Title 1",
-            "variants": [
-                {"id": 101, "price": 2945, "is_enabled": True, "is_default": True}
-            ],
-        }
-        mock_printify_client.create_product.return_value = {"id": "prod-1"}
+        with patch.object(
+            pipeline_module,
+            "mark_idea_as_published",
+            return_value=True,
+        ) as mock_mark:
+            orchestrator.record_post("alpha")
 
-        with (
-            patch.object(
-                pipeline_module,
-                "load_prompts",
-                return_value={
-                    "design": "design prompt",
-                    "image": "image prompt",
-                    "background": "background prompt",
-                    "mockup": "mockup prompt",
-                    "title": "title prompt",
-                    "description": "description prompt",
-                    "keywords": "keywords prompt",
-                    "default_description": "default description",
-                    "filter_design_descriptions": "filter prompt",
-                },
-            ),
-            patch.object(
-                pipeline_module,
-                "read_keywords_from_ideas_csv",
-                return_value=(["alpha"], ["retro stripe"]),
-            ),
-            patch.object(
-                pipeline_module,
-                "load_color_to_ids_map",
-                return_value={"pepper": [101]},
-            ),
-            patch.object(
-                pipeline_module.constants,
-                "REVIEW_DESIGNS",
-                False,
-            ),
-            patch.object(
-                pipeline_module,
-                "require_setting",
-                side_effect=["gemini-key", "removebg-key", "printify-token", "shop-id"],
-            ),
-            patch.object(pipeline_module, "GeminiClient", return_value=MagicMock()),
-            patch.object(pipeline_module, "RemoveBgClient", return_value=MagicMock()),
-            patch.object(
-                pipeline_module, "PrintifyClient", return_value=mock_printify_client
-            ),
-            patch.object(
-                pipeline_module,
-                "generate_ideas_for_keyword",
-                return_value=[{"title": "Alpha Shirt"}],
-            ),
-            patch.object(
-                pipeline_module,
-                "filter_ideas_for_keyword",
-                return_value=(
-                    [{"title": "Alpha Shirt"}],
-                    {
-                        "selected_designs": [
-                            {"index": 0, "pass": True, "rank": 1, "reason": "fit"}
-                        ]
-                    },
-                ),
-            ),
-            patch.object(pipeline_module, "build_idea_object", return_value=idea),
-            patch.object(
-                pipeline_module,
-                "generate_design_image",
-                return_value=(transparent_path, b"png"),
-            ),
-            patch.object(
-                pipeline_module,
-                "_generate_post_design_assets",
-                return_value=(
-                    transparent_path,
-                    mockup_path,
-                    mockup_path,
-                ),
-            ),
-            patch.object(
-                pipeline_module,
-                "save_final_mockup_image",
-                return_value=tmp_path / "saved_final.png",
-            ) as mock_save_final_mockup,
-            patch.object(
-                pipeline_module,
-                "generate_listing_fields",
-                return_value=("Listing Title", "Description", ["tag one", "tag two"]),
-            ),
-            patch.object(pipeline_module, "select_colors", return_value=["pepper"]),
-            patch.object(
-                pipeline_module, "mark_idea_as_published", return_value=True
-            ) as mock_mark,
-            patch.object(
-                pipeline_module,
-                "append_created_product_to_schedules",
-                return_value=True,
-            ) as mock_append_schedule,
-        ):
-            pipeline_module.run_pipeline(dry_run=False)
-
-        mock_append_schedule.assert_called_once_with(
-            product_title="Listing Title 1",
-            product_id="prod-1",
-        )
-        mock_save_final_mockup.assert_called_once_with(
-            idea=idea,
-            mockup_cropped_path=mockup_path,
-        )
         mock_mark.assert_called_once_with(
             path=constants.IDEAS_CSV_PATH,
             keyword="alpha",
-            shirt_count=constants.IDEAS_PER_KEYWORD,
+            shirt_count=2,
         )
 
-    def test_manual_background_mode_skips_removebg_secret_lookup(self, tmp_path):
+    def test_manual_background_mode_skips_removebg_secret_lookup(self):
         """Does not require the remove.bg secret when manual background removal is enabled."""
-        transparent_path = tmp_path / "design_transparent.png"
-        mockup_path = tmp_path / "mockup.png"
-        transparent_path.write_bytes(b"png")
-        mockup_path.write_bytes(b"png")
-
-        idea = Idea(
-            keyword="alpha",
-            original_title="Alpha Shirt",
-            title="Alpha Shirt 1",
-            folder_name="Alpha_Shirt_1",
-            folder_path=tmp_path / "Alpha_Shirt_1",
-            payload={"shirt_colors": ["pepper"]},
-        )
-        mock_printify_client = MagicMock()
-        mock_printify_client.pick_base_price_usd.return_value = 29.45
-        mock_printify_client.upload_image.side_effect = [
-            {"id": "img-1"},
-            {"id": "img-2"},
-        ]
-        mock_printify_client.build_payload.return_value = {
-            "title": "Listing Title 1",
-            "variants": [
-                {"id": 101, "price": 2945, "is_enabled": True, "is_default": True}
-            ],
-        }
-        mock_printify_client.create_product.return_value = {"id": "prod-1"}
-
         with (
             patch.object(
-                pipeline_module,
-                "load_prompts",
-                return_value={
-                    "design": "design prompt",
-                    "image": "image prompt",
-                    "background": "background prompt",
-                    "mockup": "mockup prompt",
-                    "title": "title prompt",
-                    "description": "description prompt",
-                    "keywords": "keywords prompt",
-                    "default_description": "default description",
-                    "filter_design_descriptions": "filter prompt",
-                },
-            ),
-            patch.object(
-                pipeline_module,
-                "read_keywords_from_ideas_csv",
-                return_value=(["alpha"], ["retro stripe"]),
-            ),
-            patch.object(
-                pipeline_module,
-                "load_color_to_ids_map",
-                return_value={"pepper": [101]},
-            ),
-            patch.object(
                 pipeline_module.constants,
-                "REVIEW_DESIGNS",
-                False,
+                "BACKGROUND_REMOVAL_MODE",
+                constants.REMOVE_BG_MANUAL,
             ),
             patch.object(
                 pipeline_module,
@@ -272,52 +105,12 @@ class TestRunPipeline:
                 side_effect=["gemini-key", "printify-token", "shop-id"],
             ) as mock_require_setting,
             patch.object(
-                pipeline_module.constants,
-                "BACKGROUND_REMOVAL_MODE",
-                constants.REMOVE_BG_MANUAL,
+                pipeline_module.Orchestrator,
+                "set_up_api_clients",
+                return_value=None,
             ),
-            patch.object(pipeline_module, "GeminiClient", return_value=MagicMock()),
-            patch.object(pipeline_module, "RemoveBgClient", return_value=MagicMock()),
-            patch.object(
-                pipeline_module, "PrintifyClient", return_value=mock_printify_client
-            ),
-            patch.object(
-                pipeline_module,
-                "generate_ideas_for_keyword",
-                return_value=[{"title": "Alpha Shirt"}],
-            ),
-            patch.object(
-                pipeline_module,
-                "filter_ideas_for_keyword",
-                return_value=(
-                    [{"title": "Alpha Shirt"}],
-                    {
-                        "selected_designs": [
-                            {"index": 0, "pass": True, "rank": 1, "reason": "fit"}
-                        ]
-                    },
-                ),
-            ),
-            patch.object(pipeline_module, "build_idea_object", return_value=idea),
-            patch.object(
-                pipeline_module,
-                "generate_design_image",
-                return_value=(transparent_path, b"png"),
-            ),
-            patch.object(
-                pipeline_module,
-                "_generate_post_design_assets",
-                return_value=(transparent_path, mockup_path, mockup_path),
-            ),
-            patch.object(
-                pipeline_module,
-                "generate_listing_fields",
-                return_value=("Listing Title", "Description", ["tag one", "tag two"]),
-            ),
-            patch.object(pipeline_module, "select_colors", return_value=["pepper"]),
-            patch.object(pipeline_module, "mark_idea_as_published", return_value=True),
         ):
-            pipeline_module.run_pipeline(dry_run=False)
+            pipeline_module.Orchestrator(dry_run=False)
 
         assert mock_require_setting.call_args_list == [
             (("GEMINI_API_KEY", constants.GEMINI_API_KEY_PATH),),
@@ -327,63 +120,11 @@ class TestRunPipeline:
 
     def test_does_not_mark_keyword_published_when_all_ideas_fail(self):
         """Skips ideas.csv updates when no product finishes successfully for the keyword."""
-        with (
-            patch.object(
-                pipeline_module,
-                "load_prompts",
-                return_value={
-                    "design": "design prompt",
-                    "image": "image prompt",
-                    "background": "background prompt",
-                    "mockup": "mockup prompt",
-                    "title": "title prompt",
-                    "description": "description prompt",
-                    "keywords": "keywords prompt",
-                    "default_description": "default description",
-                    "filter_design_descriptions": "filter prompt",
-                },
-            ),
-            patch.object(
-                pipeline_module,
-                "read_keywords_from_ideas_csv",
-                return_value=(["alpha"], ["retro stripe"]),
-            ),
-            patch.object(
-                pipeline_module,
-                "load_color_to_ids_map",
-                return_value={"pepper": [101]},
-            ),
-            patch.object(
-                pipeline_module,
-                "require_setting",
-                side_effect=["gemini-key", "removebg-key", "printify-token", "shop-id"],
-            ),
-            patch.object(pipeline_module, "GeminiClient", return_value=MagicMock()),
-            patch.object(pipeline_module, "RemoveBgClient", return_value=MagicMock()),
-            patch.object(pipeline_module, "PrintifyClient", return_value=MagicMock()),
-            patch.object(
-                pipeline_module,
-                "generate_ideas_for_keyword",
-                return_value=[{"title": "Alpha Shirt"}],
-            ),
-            patch.object(
-                pipeline_module,
-                "filter_ideas_for_keyword",
-                return_value=(
-                    [{"title": "Alpha Shirt"}],
-                    {
-                        "selected_designs": [
-                            {"index": 0, "pass": True, "rank": 1, "reason": "fit"}
-                        ]
-                    },
-                ),
-            ),
-            patch.object(
-                pipeline_module, "build_idea_object", side_effect=RuntimeError("boom")
-            ),
-            patch.object(pipeline_module, "mark_idea_as_published") as mock_mark,
-        ):
-            pipeline_module.run_pipeline(dry_run=False)
+        orchestrator = self._build_orchestrator()
+        orchestrator.successful_products_count = 0
+
+        with patch.object(pipeline_module, "mark_idea_as_published") as mock_mark:
+            orchestrator.record_post("alpha")
 
         mock_mark.assert_not_called()
 
@@ -456,19 +197,21 @@ class TestGenerateDesignImage:
 class TestNormalizeIdeaPayload:
     """Tests for idea payload normalization."""
 
-    def test_preserves_mockup_color_field(self):
-        """Copies the new mockup_color field from raw Gemini payload."""
+    def test_keeps_supported_fields_and_ignores_removed_mockup_color(self):
+        """Normalizes supported fields and omits legacy mockup_color from payload."""
         raw_payload = {
             "title": "Alpha",
-            "mockup_color": "Light Blue",
             "shirt_colors": ["pepper"],
+            "mockup_color": "Light Blue",
         }
 
         normalized = generation.idea_processing.normalize_idea_payload(
             raw_payload, "alpha"
         )
 
-        assert normalized["mockup_color"] == "Light Blue"
+        assert normalized["title"] == "Alpha"
+        assert normalized["shirt_colors"] == ["pepper"]
+        assert "mockup_color" not in normalized
 
 
 class TestGeneratePostDesignAssets:
@@ -503,6 +246,8 @@ class TestGeneratePostDesignAssets:
         gemini.generate_image.return_value = b"mockup-final"
         remove_bg_client = MagicMock()
         remove_bg_client.remove_background.return_value = b"transparent"
+        mockup_shirt_path = idea_folder / "lightBlue.png"
+        mockup_shirt_path.write_bytes(b"mockup-base")
 
         default_mockup_path = idea_folder / "mockup_default_lightBlue.png"
         default_mockup_path.write_bytes(b"default-mockup")
@@ -515,16 +260,20 @@ class TestGeneratePostDesignAssets:
             ),
             patch.object(
                 generation.assets,
+                "pick_mockup_shirt",
+                return_value=mockup_shirt_path,
+            ),
+            patch.object(
+                generation.assets,
                 "crop_center_percent",
                 return_value=None,
             ),
         ):
-            generation.assets._generate_post_design_assets(
+            generation.assets.generate_post_design_assets(
                 idea=idea,
                 prompts={"background": "bg", "mockup": "mk"},
                 gemini=gemini,
                 remove_bg_client=remove_bg_client,
-                design_path=design_path,
                 design_bytes=b"raw-design",
             )
 
@@ -563,6 +312,8 @@ class TestGeneratePostDesignAssets:
         gemini.generate_image.return_value = b"mockup-final"
         remove_bg_client = MagicMock()
         remove_bg_client.remove_background.return_value = b"transparent"
+        mockup_shirt_path = idea_folder / "lightBlue.png"
+        mockup_shirt_path.write_bytes(b"mockup-base")
 
         default_mockup_path = idea_folder / "mockup_default_lightBlue.png"
         default_mockup_path.write_bytes(b"default-mockup")
@@ -575,24 +326,28 @@ class TestGeneratePostDesignAssets:
             ) as mock_create_default,
             patch.object(
                 generation.assets,
+                "pick_mockup_shirt",
+                return_value=mockup_shirt_path,
+            ),
+            patch.object(
+                generation.assets,
                 "crop_center_percent",
                 return_value=None,
             ),
         ):
             _, mockup_path, mockup_cropped_path = (
-                generation.assets._generate_post_design_assets(
+                generation.assets.generate_post_design_assets(
                     idea=idea,
                     prompts={"background": "bg", "mockup": "mk"},
                     gemini=gemini,
                     remove_bg_client=remove_bg_client,
-                    design_path=design_path,
                     design_bytes=b"raw-design",
                 )
             )
 
         mock_create_default.assert_called_once_with(
             design_path=idea_folder / "design_transparent.png",
-            color="Light Blue",
+            mockup_shirt=mockup_shirt_path,
             output_dir=idea.folder_path,
         )
         assert mockup_path.exists()
@@ -601,8 +356,8 @@ class TestGeneratePostDesignAssets:
         _, kwargs = gemini.generate_image.call_args
         assert kwargs["image_bytes"] == b"default-mockup"
 
-    def test_raises_when_mockup_color_is_missing(self, tmp_path: Path):
-        """Fails fast when mockup_color is absent from the idea payload."""
+    def test_raises_when_mockup_shirt_file_is_missing(self, tmp_path: Path):
+        """Fails fast when shirt-selection returns a missing base mockup file."""
         idea_folder = tmp_path / "idea"
         idea_folder.mkdir(parents=True, exist_ok=True)
         design_path = idea_folder / "design.png"
@@ -616,14 +371,22 @@ class TestGeneratePostDesignAssets:
             folder_path=idea_folder,
             payload={},
         )
+        remove_bg_client = MagicMock()
+        remove_bg_client.remove_background.return_value = b"transparent"
 
-        with pytest.raises(ValueError, match="mockup_color"):
-            generation.assets._generate_post_design_assets(
+        with (
+            patch.object(
+                generation.assets,
+                "pick_mockup_shirt",
+                return_value=idea_folder / "missing.png",
+            ),
+            pytest.raises(ValueError, match="Missing required file"),
+        ):
+            generation.assets.generate_post_design_assets(
                 idea=idea,
                 prompts={"background": "bg", "mockup": "mk"},
                 gemini=MagicMock(),
-                remove_bg_client=MagicMock(),
-                design_path=design_path,
+                remove_bg_client=remove_bg_client,
                 design_bytes=b"raw-design",
             )
 

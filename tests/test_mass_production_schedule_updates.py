@@ -73,7 +73,7 @@ class TestScheduleUpdates:
             encoding="utf-8",
         )
         auto_schedule.write_text(
-            "nick_name,product_id,shop_id,publish_status,publish_date\n",
+            "nick_name,product_id,publish_status,publish_date\n",
             encoding="utf-8",
         )
 
@@ -121,7 +121,12 @@ class TestScheduleUpdates:
             "publish_status": "False",
             "publish_date": "03/21/2026",
         }
-        assert auto_rows[-1] == data_rows[-1]
+        assert auto_rows[-1] == {
+            "nick_name": "Alpha Tee",
+            "product_id": "prod-123",
+            "publish_status": "False",
+            "publish_date": "03/21/2026",
+        }
 
     def test_append_created_product_skips_existing_product_id(self, tmp_path) -> None:
         """Skips insertion when product_id already exists in data/schedule.csv."""
@@ -135,7 +140,7 @@ class TestScheduleUpdates:
             encoding="utf-8",
         )
         auto_schedule.write_text(
-            "nick_name,product_id,shop_id,publish_status,publish_date\n",
+            "nick_name,product_id,publish_status,publish_date\n",
             encoding="utf-8",
         )
 
@@ -181,7 +186,7 @@ class TestScheduleUpdates:
             encoding="utf-8",
         )
         auto_schedule.write_text(
-            "nick_name,product_id,shop_id,publish_status,publish_date\n",
+            "nick_name,product_id,publish_status,publish_date\n",
             encoding="utf-8",
         )
 

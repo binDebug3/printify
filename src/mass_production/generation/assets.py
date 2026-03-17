@@ -9,15 +9,19 @@ from typing import Optional, Any
 from config import constants
 from photoshop.remove_bg import RemoveBgClient
 from photoshop.design_crop import (
-    crop_design_image_to_content, 
+    crop_design_image_to_content,
     crop_center_percent,
     create_default_color_mockup,
 )
+from photoshop.pick_mockup_shirt import (
+    pick_mockup_shirt,
+)
 from clients.gemini_client import GeminiClient
 from file_tools.io_utils import (
-    write_bytes, 
+    write_bytes,
     write_text,
     slugify_title,
+    cut,
 )
 from generation.idea_processing import write_persona_files
 from product.models import Idea
@@ -55,12 +59,11 @@ def generate_design_image(
     return design_path, design_bytes
 
 
-def _generate_post_design_assets(
+def generate_post_design_assets(
     idea: Idea,
     prompts: dict[str, str],
     gemini: GeminiClient,
     remove_bg_client: RemoveBgClient,
-    design_path: Path,
     design_bytes: bytes,
     dashboard: Optional[Any] = None,
 ) -> tuple[Path, Path, Path]:
@@ -71,18 +74,12 @@ def _generate_post_design_assets(
         prompts: Prompt templates.
         gemini: Gemini client.
         remove_bg_client: remove.bg client.
-        design_path: Path to the generated design image.
         design_bytes: Generated design bytes.
 
     Returns:
         Tuple of paths: transparent, mockup, mockup_cropped.
     """
     idea_json: str = json.dumps(idea.payload, indent=2)
-    mockup_color: str = str(idea.payload.get("mockup_color", "")).strip()
-    if not mockup_color:
-        raise ValueError(
-            f"Missing required idea payload field 'mockup_color' for '{idea.title}'"
-        )
 
     # remove background
     log_action(f"Removing background from design for '{idea.title}'")
@@ -95,6 +92,12 @@ def _generate_post_design_assets(
         "transparent_design",
         transparent_path,
     )
+
+    mockup_shirt_path: Path = pick_mockup_shirt(transparent_path)
+    if not mockup_shirt_path.exists():
+        raise ValueError(
+            f"Missing required file '{cut(mockup_shirt_path)}' for '{idea.title}'"
+        )
 
     background_prompt: str = f"Design JSON:\n{idea_json}\n\n{prompts['background']}"
     log_action(f"Generating background text for '{idea.title}'")
@@ -111,7 +114,7 @@ def _generate_post_design_assets(
     # mock up
     default_mockup_path: Path = create_default_color_mockup(
         design_path=transparent_path,
-        color=mockup_color,
+        mockup_shirt=mockup_shirt_path,
         output_dir=idea.folder_path,
     )
     safe_dashboard_call(
@@ -119,9 +122,7 @@ def _generate_post_design_assets(
     )
     default_mockup_bytes: bytes = default_mockup_path.read_bytes()
 
-    shirt_color_mockup: str = mockup_color
     mockup_prompt: str = (
-        f"Make the t shirt color {shirt_color_mockup}\n"
         f"Model description and background scene: {mockup_scene}\n"
         f"{prompts['mockup']}\n\n"
     )
@@ -130,7 +131,7 @@ def _generate_post_design_assets(
         mockup_prompt,
         image_bytes=default_mockup_bytes,
     )
-    slugified_color: str = slugify_title(shirt_color_mockup)
+    slugified_color: str = slugify_title(mockup_shirt_path.stem)
     mockup_path: Path = idea.folder_path / f"mockup_({slugified_color}).png"
     write_bytes(mockup_path, mockup_bytes)
     safe_dashboard_call(dashboard, "update_image", "generated_mockup", mockup_path)

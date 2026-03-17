@@ -33,6 +33,8 @@ Automation for two workflows:
 - Optional browser review UI for keep/retry/reject before background removal.
 - Local product viewer UI for browsing posted products by tile and detail page.
 - Dry-run-friendly workflow with per-design artifacts in `data/products`.
+- Shirt mockup selection now balances readability with analogous color harmony,
+    favoring pairings such as lighter blues on darker blues over flat same-value matches.
 
 ## File Architecture
 
@@ -176,6 +178,13 @@ cd printify
 python src/mass_production/show_products.py
 ```
 
+Manual shirt picker review UI (generates and previews color-selection mockups):
+
+```bash
+cd printify
+python tests/manual/manual_test_shirt_picker.py
+```
+
 Required environment variables:
 
 - `PRINTIFY_API_TOKEN`
@@ -188,6 +197,13 @@ Run the pipeline:
 ```bash
 cd printify
 python src/mass_production.py
+```
+
+Generate average shirt colors from base mockups:
+
+```bash
+cd printify
+python src/mass_production/photoshop/shirt_colors.py
 ```
 
 Pipeline diagram:

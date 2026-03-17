@@ -116,7 +116,7 @@ def _confirm_runtime_settings(settings: dict[str, Any]) -> bool:
 def main() -> None:
     """Run the pipeline using command-line arguments."""
     _configure_module_path()
-    import constants
+    import config.constants as constants
     from pipeline import run_pipeline
 
     args = parse_args()

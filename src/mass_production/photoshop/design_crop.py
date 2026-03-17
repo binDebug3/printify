@@ -10,7 +10,7 @@ from typing import Optional
 
 from PIL import Image
 from schedule.logger_config import log_action
-from photoshop.io_utils import cut
+from file_tools.io_utils import cut
 
 
 FOREGROUND_TOLERANCE: int = 10
@@ -342,3 +342,47 @@ def create_default_color_mockup(
 
     log_action(f"Saved color mockup to '{cut(output_path)}'")
     return output_path
+
+
+def crop_center_percent(input_path: Path, output_path: Path, percent: float) -> None:
+    """Center-crop to square, then center-crop again by percent.
+
+    Args:
+        input_path: Source image path.
+        output_path: Destination path.
+        percent: Fraction to retain from the square image along width and height.
+
+    Raises:
+        ValueError: If percent is not between 0 and 1 inclusive.
+    """
+    if percent <= 0 or percent > 1:
+        raise ValueError("percent must be > 0 and <= 1")
+
+    log_action(
+        f"Center-cropping image '{cut(input_path)}' to 1:1, then keeping "
+        f"{percent * 100:.1f}% of the centered square into '{cut(output_path)}'"
+    )
+    with Image.open(input_path) as image:
+        width, height = image.size
+
+        # Step 1: center crop to square (1:1)
+        square_size: int = min(width, height)
+        square_left: int = (width - square_size) // 2
+        square_top: int = (height - square_size) // 2
+        square_right: int = square_left + square_size
+        square_bottom: int = square_top + square_size
+        square_image = image.crop(
+            (square_left, square_top, square_right, square_bottom)
+        )
+
+        # Step 2: center crop the square by requested percent (e.g., 0.8 -> keep inner 80%)
+        inner_size: int = max(1, int(square_size * percent))
+        inner_left: int = (square_size - inner_size) // 2
+        inner_top: int = (square_size - inner_size) // 2
+        inner_right: int = inner_left + inner_size
+        inner_bottom: int = inner_top + inner_size
+
+        cropped = square_image.crop((inner_left, inner_top, inner_right, inner_bottom))
+
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        cropped.save(output_path)

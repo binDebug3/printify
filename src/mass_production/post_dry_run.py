@@ -17,10 +17,10 @@ if str(SRC_ROOT) not in sys.path:
 
 from schedule.logger_config import log_action  # noqa: E402
 
-import constants  # noqa: E402
-from photoshop.io_utils import read_json, read_text  # noqa: E402
+import config.constants as constants  # noqa: E402
+from file_tools.io_utils import read_json, read_text  # noqa: E402
 from clients.printify_client import PrintifyClient  # noqa: E402
-from schedule_updates import append_created_product_to_schedules  # noqa: E402
+from product.schedule_updates import append_created_product_to_schedules  # noqa: E402
 
 
 def _open_actions_log_in_vscode() -> None:

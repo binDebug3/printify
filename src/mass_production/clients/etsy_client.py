@@ -3,9 +3,9 @@ import requests
 from pathlib import Path
 from typing import Any, Dict, List
 
-import constants
+import config.constants as constants
 from schedule.logger_config import log_action
-from models import EtsyConfig
+from product.models import EtsyConfig
 
 
 class EtsyClient:

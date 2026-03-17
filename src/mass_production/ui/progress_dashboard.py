@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
 from schedule.logger_config import log_action
-from photoshop.io_utils import cut
+from file_tools.io_utils import cut
 
 
 IMAGE_SLOT_LABELS: Dict[str, str] = {

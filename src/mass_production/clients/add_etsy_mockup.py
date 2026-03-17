@@ -13,8 +13,8 @@ from typing import Any, Dict, List
 
 import requests
 
-import constants
-from models import EtsyConfig
+import config.constants as constants
+from product.models import EtsyConfig
 from clients.etsy_client import EtsyClient
 from schedule.logger_config import log_action
 from schedule.tools import load_api_token

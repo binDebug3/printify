@@ -8,9 +8,9 @@ from typing import Any, Dict, List
 
 import requests
 
-import constants
+import config.constants as constants
 from schedule.logger_config import log_action
-from photoshop.io_utils import cut
+from file_tools.io_utils import cut
 
 
 class PrintifyClient:

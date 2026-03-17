@@ -18,7 +18,7 @@ from typing import Any, Dict, List, Optional
 
 import requests
 
-import constants
+import config.constants as constants
 
 try:
     from schedule.logger_config import log_action

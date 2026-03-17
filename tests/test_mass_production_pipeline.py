@@ -23,8 +23,8 @@ sys.modules.setdefault("google", google_module)
 sys.modules.setdefault("google.genai", genai_module)
 sys.modules.setdefault("gemini_client", gemini_client_module)
 
-from models import Idea  # noqa: E402
-import constants  # noqa: E402
+from product.models import Idea  # noqa: E402
+import config.constants as constants  # noqa: E402
 import pipeline as pipeline_module  # noqa: E402
 
 
@@ -397,7 +397,7 @@ class TestRunPipeline:
         }
         """
 
-        filtered_ideas, metadata = pipeline_module._filter_ideas_for_keyword(
+        filtered_ideas, metadata = pipeline_module.filter_ideas_for_keyword(
             gemini=gemini,
             filter_prompt="filter prompt",
             keyword="alpha",
@@ -433,7 +433,7 @@ class TestGenerateDesignImage:
             "crop_design_image_to_content",
             return_value=b"cropped-image",
         ) as mock_crop:
-            design_path, design_bytes = pipeline_module._generate_design_image(
+            design_path, design_bytes = pipeline_module.generate_design_image(
                 idea=idea,
                 prompts={"image": "image prompt"},
                 gemini=gemini,
@@ -643,7 +643,7 @@ class TestSaveFinalMockupImage:
             "ALL_FINAL_MOCKUPS_DIR",
             all_final_mockups_dir,
         ):
-            destination_path = pipeline_module._save_final_mockup_image(
+            destination_path = pipeline_module.save_final_mockup_image(
                 idea=idea,
                 mockup_cropped_path=mockup_cropped_path,
             )
@@ -675,7 +675,7 @@ class TestGenerateListingFields:
             "tag one, tag two, tag three",
         ]
 
-        title, description, keywords = pipeline_module._generate_listing_fields(
+        title, description, keywords = pipeline_module.generate_listing_fields(
             idea=idea,
             prompts={
                 "title": "title prompt",

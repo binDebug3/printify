@@ -12,7 +12,7 @@ MASS_PRODUCTION_ROOT = (
 if str(MASS_PRODUCTION_ROOT) not in sys.path:
     sys.path.insert(0, str(MASS_PRODUCTION_ROOT))
 
-import schedule_updates as schedule_updates_module  # noqa: E402
+import product.schedule_updates as schedule_updates_module  # noqa: E402
 
 
 class TestScheduleUpdates:
@@ -96,7 +96,7 @@ class TestScheduleUpdates:
                 return_value="03/21/2026",
             ),
             patch.object(
-                schedule_updates_module.constants,
+                config.constants,
                 "SCHEDULE_NEW_PRODUCTS",
                 True,
             ),
@@ -149,7 +149,7 @@ class TestScheduleUpdates:
                 schedule_updates_module, "load_shop_id", return_value="shop-xyz"
             ),
             patch.object(
-                schedule_updates_module.constants,
+                config.constants,
                 "SCHEDULE_NEW_PRODUCTS",
                 True,
             ),
@@ -192,7 +192,7 @@ class TestScheduleUpdates:
                 auto_schedule,
             ),
             patch.object(
-                schedule_updates_module.constants,
+                config.constants,
                 "SCHEDULE_NEW_PRODUCTS",
                 False,
             ),

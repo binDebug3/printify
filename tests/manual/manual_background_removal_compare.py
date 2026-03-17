@@ -21,7 +21,7 @@ SRC_ROOT: Path = PRINTIFY_ROOT / "src"
 
 try:
     from schedule.logger_config import log_action
-    import constants
+    import config.constants as constants
     from photoshop.remove_bg import RemoveBgClient
 except ModuleNotFoundError:
     if str(SRC_ROOT) not in sys.path:
@@ -30,7 +30,7 @@ except ModuleNotFoundError:
     if str(mass_production_root) not in sys.path:
         sys.path.insert(0, str(mass_production_root))
     from schedule.logger_config import log_action
-    import constants
+    import config.constants as constants
     from photoshop.remove_bg import RemoveBgClient
 
 

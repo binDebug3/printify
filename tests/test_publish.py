@@ -46,8 +46,7 @@ def row(
 def stub_etsy_sync(request):
     """Stub Etsy mockup sync by default so publish tests do not sleep for one minute."""
     if (
-        request.node.name
-        == "test_waits_then_syncs_etsy_mockup_for_successful_publishes"
+        request.node.name == "test_waits_then_syncs_etsy_mockup_for_successful_publishes"
     ):
         yield
         return

@@ -12,7 +12,10 @@ MASS_PRODUCTION_ROOT = (
 )
 sys.path.insert(0, str(MASS_PRODUCTION_ROOT))
 
-from file_tools.io_utils import mark_idea_as_published, read_keywords_from_ideas_csv  # noqa: E402
+from file_tools.ideas_manager import (  # noqa: E402
+    mark_idea_as_published, 
+    read_keywords_from_ideas_csv
+)  
 
 
 def test_read_keywords_from_ideas_csv_only_includes_used_false(tmp_path):

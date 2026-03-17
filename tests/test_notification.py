@@ -114,4 +114,3 @@ class TestSendEmail:
             send_email("Hello", "World", recipient="target@example.com")
 
         assert "raw" in captured_body
-

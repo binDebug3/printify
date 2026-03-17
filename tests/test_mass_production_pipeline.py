@@ -3,6 +3,7 @@
 import sys
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
+from typing import Iterator
 from unittest.mock import MagicMock, patch
 import pytest
 
@@ -14,11 +15,11 @@ if str(MASS_PRODUCTION_ROOT) not in sys.path:
 
 google_module = ModuleType("google")
 genai_module = ModuleType("google.genai")
-genai_module.Client = MagicMock()
-genai_module.types = SimpleNamespace()
-google_module.genai = genai_module
+setattr(genai_module, "Client", MagicMock())
+setattr(genai_module, "types", SimpleNamespace())
+setattr(google_module, "genai", genai_module)
 gemini_client_module = ModuleType("gemini_client")
-gemini_client_module.GeminiClient = MagicMock()
+setattr(gemini_client_module, "GeminiClient", MagicMock())
 sys.modules.setdefault("google", google_module)
 sys.modules.setdefault("google.genai", genai_module)
 sys.modules.setdefault("gemini_client", gemini_client_module)
@@ -26,10 +27,14 @@ sys.modules.setdefault("gemini_client", gemini_client_module)
 from product.models import Idea  # noqa: E402
 import config.constants as constants  # noqa: E402
 import pipeline as pipeline_module  # noqa: E402
+import generation.idea_processing  # noqa: E402
+import generation.assets  # noqa: E402
+import generation.listing  # noqa: E402
+import file_tools.io_utils  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
-def disable_progress_ui() -> None:
+def disable_progress_ui() -> Iterator[None]:
     """Disable the optional Tk progress dashboard for automated tests."""
     with patch.object(pipeline_module.constants, "ENABLE_PROGRESS_UI", False):
         yield
@@ -41,7 +46,7 @@ class TestRunPipeline:
     def test_logs_and_prints_when_no_unused_keywords_exist(self):
         """Stops early with a user-visible message when ideas.csv has no used=false rows."""
         with (
-            patch.object(pipeline_module, "_load_prompts", return_value={}),
+            patch.object(pipeline_module, "load_prompts", return_value={}),
             patch.object(
                 pipeline_module,
                 "read_keywords_from_ideas_csv",
@@ -49,7 +54,7 @@ class TestRunPipeline:
             ),
             patch.object(
                 pipeline_module,
-                "_load_color_to_ids_map",
+                "load_color_to_ids_map",
                 return_value={"pepper": [101]},
             ),
             patch.object(pipeline_module, "log_action") as mock_log,
@@ -95,7 +100,7 @@ class TestRunPipeline:
         with (
             patch.object(
                 pipeline_module,
-                "_load_prompts",
+                "load_prompts",
                 return_value={
                     "design": "design prompt",
                     "image": "image prompt",
@@ -115,7 +120,7 @@ class TestRunPipeline:
             ),
             patch.object(
                 pipeline_module,
-                "_load_color_to_ids_map",
+                "load_color_to_ids_map",
                 return_value={"pepper": [101]},
             ),
             patch.object(
@@ -125,7 +130,7 @@ class TestRunPipeline:
             ),
             patch.object(
                 pipeline_module,
-                "_require_setting",
+                "require_setting",
                 side_effect=["gemini-key", "removebg-key", "printify-token", "shop-id"],
             ),
             patch.object(pipeline_module, "GeminiClient", return_value=MagicMock()),
@@ -135,12 +140,12 @@ class TestRunPipeline:
             ),
             patch.object(
                 pipeline_module,
-                "_generate_ideas_for_keyword",
+                "generate_ideas_for_keyword",
                 return_value=[{"title": "Alpha Shirt"}],
             ),
             patch.object(
                 pipeline_module,
-                "_filter_ideas_for_keyword",
+                "filter_ideas_for_keyword",
                 return_value=(
                     [{"title": "Alpha Shirt"}],
                     {
@@ -150,10 +155,10 @@ class TestRunPipeline:
                     },
                 ),
             ),
-            patch.object(pipeline_module, "_build_idea_object", return_value=idea),
+            patch.object(pipeline_module, "build_idea_object", return_value=idea),
             patch.object(
                 pipeline_module,
-                "_generate_design_image",
+                "generate_design_image",
                 return_value=(transparent_path, b"png"),
             ),
             patch.object(
@@ -167,15 +172,15 @@ class TestRunPipeline:
             ),
             patch.object(
                 pipeline_module,
-                "_save_final_mockup_image",
+                "save_final_mockup_image",
                 return_value=tmp_path / "saved_final.png",
             ) as mock_save_final_mockup,
             patch.object(
                 pipeline_module,
-                "_generate_listing_fields",
+                "generate_listing_fields",
                 return_value=("Listing Title", "Description", ["tag one", "tag two"]),
             ),
-            patch.object(pipeline_module, "_select_colors", return_value=["pepper"]),
+            patch.object(pipeline_module, "select_colors", return_value=["pepper"]),
             patch.object(
                 pipeline_module, "mark_idea_as_published", return_value=True
             ) as mock_mark,
@@ -233,7 +238,7 @@ class TestRunPipeline:
         with (
             patch.object(
                 pipeline_module,
-                "_load_prompts",
+                "load_prompts",
                 return_value={
                     "design": "design prompt",
                     "image": "image prompt",
@@ -253,7 +258,7 @@ class TestRunPipeline:
             ),
             patch.object(
                 pipeline_module,
-                "_load_color_to_ids_map",
+                "load_color_to_ids_map",
                 return_value={"pepper": [101]},
             ),
             patch.object(
@@ -263,7 +268,7 @@ class TestRunPipeline:
             ),
             patch.object(
                 pipeline_module,
-                "_require_setting",
+                "require_setting",
                 side_effect=["gemini-key", "printify-token", "shop-id"],
             ) as mock_require_setting,
             patch.object(
@@ -278,12 +283,12 @@ class TestRunPipeline:
             ),
             patch.object(
                 pipeline_module,
-                "_generate_ideas_for_keyword",
+                "generate_ideas_for_keyword",
                 return_value=[{"title": "Alpha Shirt"}],
             ),
             patch.object(
                 pipeline_module,
-                "_filter_ideas_for_keyword",
+                "filter_ideas_for_keyword",
                 return_value=(
                     [{"title": "Alpha Shirt"}],
                     {
@@ -293,10 +298,10 @@ class TestRunPipeline:
                     },
                 ),
             ),
-            patch.object(pipeline_module, "_build_idea_object", return_value=idea),
+            patch.object(pipeline_module, "build_idea_object", return_value=idea),
             patch.object(
                 pipeline_module,
-                "_generate_design_image",
+                "generate_design_image",
                 return_value=(transparent_path, b"png"),
             ),
             patch.object(
@@ -306,10 +311,10 @@ class TestRunPipeline:
             ),
             patch.object(
                 pipeline_module,
-                "_generate_listing_fields",
+                "generate_listing_fields",
                 return_value=("Listing Title", "Description", ["tag one", "tag two"]),
             ),
-            patch.object(pipeline_module, "_select_colors", return_value=["pepper"]),
+            patch.object(pipeline_module, "select_colors", return_value=["pepper"]),
             patch.object(pipeline_module, "mark_idea_as_published", return_value=True),
         ):
             pipeline_module.run_pipeline(dry_run=False)
@@ -325,7 +330,7 @@ class TestRunPipeline:
         with (
             patch.object(
                 pipeline_module,
-                "_load_prompts",
+                "load_prompts",
                 return_value={
                     "design": "design prompt",
                     "image": "image prompt",
@@ -345,12 +350,12 @@ class TestRunPipeline:
             ),
             patch.object(
                 pipeline_module,
-                "_load_color_to_ids_map",
+                "load_color_to_ids_map",
                 return_value={"pepper": [101]},
             ),
             patch.object(
                 pipeline_module,
-                "_require_setting",
+                "require_setting",
                 side_effect=["gemini-key", "removebg-key", "printify-token", "shop-id"],
             ),
             patch.object(pipeline_module, "GeminiClient", return_value=MagicMock()),
@@ -358,12 +363,12 @@ class TestRunPipeline:
             patch.object(pipeline_module, "PrintifyClient", return_value=MagicMock()),
             patch.object(
                 pipeline_module,
-                "_generate_ideas_for_keyword",
+                "generate_ideas_for_keyword",
                 return_value=[{"title": "Alpha Shirt"}],
             ),
             patch.object(
                 pipeline_module,
-                "_filter_ideas_for_keyword",
+                "filter_ideas_for_keyword",
                 return_value=(
                     [{"title": "Alpha Shirt"}],
                     {
@@ -374,7 +379,7 @@ class TestRunPipeline:
                 ),
             ),
             patch.object(
-                pipeline_module, "_build_idea_object", side_effect=RuntimeError("boom")
+                pipeline_module, "build_idea_object", side_effect=RuntimeError("boom")
             ),
             patch.object(pipeline_module, "mark_idea_as_published") as mock_mark,
         ):
@@ -397,7 +402,7 @@ class TestRunPipeline:
         }
         """
 
-        filtered_ideas, metadata = pipeline_module.filter_ideas_for_keyword(
+        filtered_ideas, metadata = generation.idea_processing.filter_ideas_for_keyword(
             gemini=gemini,
             filter_prompt="filter prompt",
             keyword="alpha",
@@ -429,11 +434,11 @@ class TestGenerateDesignImage:
         gemini.generate_image.return_value = b"raw-image"
 
         with patch.object(
-            pipeline_module,
+            generation.assets,
             "crop_design_image_to_content",
             return_value=b"cropped-image",
         ) as mock_crop:
-            design_path, design_bytes = pipeline_module.generate_design_image(
+            design_path, design_bytes = generation.assets.generate_design_image(
                 idea=idea,
                 prompts={"image": "image prompt"},
                 gemini=gemini,
@@ -459,7 +464,9 @@ class TestNormalizeIdeaPayload:
             "shirt_colors": ["pepper"],
         }
 
-        normalized = pipeline_module._normalize_idea_payload(raw_payload, "alpha")
+        normalized = generation.idea_processing.normalize_idea_payload(
+            raw_payload, "alpha"
+        )
 
         assert normalized["mockup_color"] == "Light Blue"
 
@@ -502,17 +509,17 @@ class TestGeneratePostDesignAssets:
 
         with (
             patch.object(
-                pipeline_module,
+                generation.assets,
                 "create_default_color_mockup",
                 return_value=default_mockup_path,
             ),
             patch.object(
-                pipeline_module,
+                generation.assets,
                 "crop_center_percent",
                 return_value=None,
             ),
         ):
-            pipeline_module._generate_post_design_assets(
+            generation.assets._generate_post_design_assets(
                 idea=idea,
                 prompts={"background": "bg", "mockup": "mk"},
                 gemini=gemini,
@@ -562,18 +569,18 @@ class TestGeneratePostDesignAssets:
 
         with (
             patch.object(
-                pipeline_module,
+                generation.assets,
                 "create_default_color_mockup",
                 return_value=default_mockup_path,
             ) as mock_create_default,
             patch.object(
-                pipeline_module,
+                generation.assets,
                 "crop_center_percent",
                 return_value=None,
             ),
         ):
             _, mockup_path, mockup_cropped_path = (
-                pipeline_module._generate_post_design_assets(
+                generation.assets._generate_post_design_assets(
                     idea=idea,
                     prompts={"background": "bg", "mockup": "mk"},
                     gemini=gemini,
@@ -611,7 +618,7 @@ class TestGeneratePostDesignAssets:
         )
 
         with pytest.raises(ValueError, match="mockup_color"):
-            pipeline_module._generate_post_design_assets(
+            generation.assets._generate_post_design_assets(
                 idea=idea,
                 prompts={"background": "bg", "mockup": "mk"},
                 gemini=MagicMock(),
@@ -639,11 +646,11 @@ class TestSaveFinalMockupImage:
         all_final_mockups_dir = tmp_path / "_all_final_mockups"
 
         with patch.object(
-            pipeline_module.constants,
+            constants,
             "ALL_FINAL_MOCKUPS_DIR",
             all_final_mockups_dir,
         ):
-            destination_path = pipeline_module.save_final_mockup_image(
+            destination_path = file_tools.io_utils.save_final_mockup_image(
                 idea=idea,
                 mockup_cropped_path=mockup_cropped_path,
             )
@@ -675,7 +682,7 @@ class TestGenerateListingFields:
             "tag one, tag two, tag three",
         ]
 
-        title, description, keywords = pipeline_module.generate_listing_fields(
+        title, description, keywords = generation.listing.generate_listing_fields(
             idea=idea,
             prompts={
                 "title": "title prompt",

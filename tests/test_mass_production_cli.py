@@ -48,6 +48,7 @@ class TestMain:
             FILTERED_IDEAS_PER_KEYWORD=10,
             BACKGROUND_REMOVAL_MODE="manual",
         )
+        fake_config_module = SimpleNamespace(constants=fake_constants_module)
 
         with (
             patch.object(cli_module, "_configure_module_path") as mock_configure,
@@ -61,7 +62,8 @@ class TestMain:
                 sys.modules,
                 {
                     "pipeline": fake_pipeline_module,
-                    "constants": fake_constants_module,
+                    "config": fake_config_module,
+                    "config.constants": fake_constants_module,
                 },
             ),
         ):
@@ -96,6 +98,7 @@ class TestMain:
             FILTERED_IDEAS_PER_KEYWORD=10,
             BACKGROUND_REMOVAL_MODE="manual",
         )
+        fake_config_module = SimpleNamespace(constants=fake_constants_module)
 
         with (
             patch.object(cli_module, "_configure_module_path") as mock_configure,
@@ -105,7 +108,8 @@ class TestMain:
                 sys.modules,
                 {
                     "pipeline": fake_pipeline_module,
-                    "constants": fake_constants_module,
+                    "config": fake_config_module,
+                    "config.constants": fake_constants_module,
                 },
             ),
         ):

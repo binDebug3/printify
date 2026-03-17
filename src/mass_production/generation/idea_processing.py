@@ -159,6 +159,13 @@ def filter_ideas_for_keyword(
     log_action(f"Filtering {len(raw_ideas)} generated ideas for keyword '{keyword}'")
     if not raw_ideas:
         return [], {"selected_designs": []}
+    if len(raw_ideas) <= filtered_ideas_per_keyword:
+        log_action(
+            "Number of generated ideas does not exceed filter limit; "
+            F"skipping filtering for keyword '{keyword}'"
+        )
+        return raw_ideas, {"selected_designs": [
+            "All ideas selected by default as count does not exceed filter limit."]}
 
     ideas_json: str = json.dumps(raw_ideas, indent=2)
     prompt: str = (

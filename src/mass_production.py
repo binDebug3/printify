@@ -117,7 +117,7 @@ def main() -> None:
     """Run the pipeline using command-line arguments."""
     _configure_module_path()
     import config.constants as constants
-    from pipeline import run_pipeline
+    from pipeline import Orchestrator
 
     args = parse_args()
     settings_to_confirm: dict[str, Any] = {
@@ -132,9 +132,8 @@ def main() -> None:
     if not _confirm_runtime_settings(settings_to_confirm):
         return
 
-    run_pipeline(
-        dry_run=args.dry_run,
-    )
+    pipeline: Orchestrator = Orchestrator(dry_run=args.dry_run)
+    pipeline.run_pipeline()
 
 
 if __name__ == "__main__":

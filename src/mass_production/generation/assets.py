@@ -22,7 +22,6 @@ from file_tools.io_utils import (
 from generation.idea_processing import write_persona_files
 from product.models import Idea
 from file_tools.parsing import parse_json_object_payload
-from ui.dashboard_adapter import safe_dashboard_call
 from schedule.logger_config import log_action
 
 
@@ -147,3 +146,31 @@ def _generate_post_design_assets(
     )
 
     return transparent_path, mockup_path, mockup_cropped_path
+
+
+def safe_dashboard_call(
+    dashboard: Optional[Any],
+    method_name: str,
+    *args,
+    **kwargs,
+) -> Optional[Any]:
+    """Safely call a method on the dashboard, if it exists.
+
+    Args:
+        dashboard: The dashboard instance or None.
+        method_name: The name of the method to call.
+        *args: Positional arguments for the method.
+        **kwargs: Keyword arguments for the method.
+    Returns:
+        The result of the dashboard method call, or None if the dashboard or method does not exist
+    """
+    if dashboard is not None:
+        method = getattr(dashboard, method_name, None)
+        if callable(method):
+            try:
+                return method(*args, **kwargs)
+            except Exception as e:
+                log_action(f"Error calling dashboard method '{method_name}': {e}")
+        else:
+            log_action(f"Dashboard method '{method_name}' not found or not callable.")
+    return None

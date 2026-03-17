@@ -26,22 +26,3 @@ def create_progress_dashboard() -> Optional[Any]:
         return None
 
 
-def safe_dashboard_call(
-    dashboard: Optional[Any],
-    method_name: str,
-    *args: Any,
-) -> None:
-    """Invoke one dashboard method and suppress UI errors.
-
-    Args:
-        dashboard: Dashboard object or None.
-        method_name: Method to call.
-        args: Positional args for the dashboard method.
-    """
-    if dashboard is None:
-        return
-    try:
-        method = getattr(dashboard, method_name)
-        method(*args)
-    except Exception as exc:  # noqa: BLE001
-        log_action(f"Dashboard update failed for method '{method_name}': {exc}")

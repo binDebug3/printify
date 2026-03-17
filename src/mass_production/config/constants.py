@@ -4,7 +4,7 @@ from pathlib import Path
 import re
 
 # Paths
-AUTOMATION_ROOT: Path = Path(__file__).resolve().parents[3]
+AUTOMATION_ROOT: Path = Path(__file__).resolve().parents[4]
 DATA_DIR: Path = AUTOMATION_ROOT / "data"
 PROMPTS_DIR: Path = DATA_DIR / "prompts"
 PRODUCTS_DIR: Path = DATA_DIR / "products"
@@ -51,7 +51,7 @@ BACKGROUND_REMOVAL_MODE: str = REMOVE_BG_SMART
 IDEAS_PER_KEYWORD: int = 2
 
 # Runtime behavior
-FILTERED_IDEAS_PER_KEYWORD: int = 1
+FILTERED_IDEAS_PER_KEYWORD: int = 2
 DEFAULT_DRY_RUN: bool = False
 MAX_KEYWORDS_PER_RUN: int = 5
 MAX_GEMINI_RETRIES: int = 2

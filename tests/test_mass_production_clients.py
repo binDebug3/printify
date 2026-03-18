@@ -114,11 +114,11 @@ class TestPrintifyClient:
             patch.object(printify_module.time, "sleep") as mock_sleep,
         ):
             limiter._last_checked_at = 1.0
-            limiter._level = 1.0
+            limiter._level = 60.0  # capacity = 60, so bucket is full
             limiter.acquire()
 
         mock_sleep.assert_called_once_with(1.0)
-        assert limiter._level == pytest.approx(1.0)
+        assert limiter._level == pytest.approx(60.0)
 
     def test_upload_image_uses_rate_limited_request_helper(self, tmp_path):
         """Routes uploads through the shared request helper so rate limiting is enforced."""

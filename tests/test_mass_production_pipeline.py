@@ -170,6 +170,9 @@ class TestPostToPrintify:
         orchestrator.dashboard = None
         orchestrator.safe_dashboard_call = MagicMock()
         orchestrator.successful_products_count = 0
+        orchestrator.completed_products = 0
+        orchestrator.products_timing_start_time = 0.0
+        orchestrator.total_ideas_scheduled = 1
         orchestrator.payload = {"title": "Listing Title"}
         orchestrator.listing_title = "Listing Title"
         orchestrator.idea = Idea(

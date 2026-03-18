@@ -2,7 +2,7 @@
 
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 MASS_PRODUCTION_ROOT = (
     Path(__file__).resolve().parent.parent / "src" / "mass_production"
@@ -25,7 +25,21 @@ class TestPromptLoading:
 
     def test_load_prompts_appends_design_and_background_response_formats(self):
         """Adds authoritative response-shape instructions to structured prompts."""
-        prompts = load_prompts()
+        prompt_texts = {
+            "design_prompt.txt": "Design prompt.",
+            "design_response.json": '{\n    "title": "text",\n    "graphic_style": "text"\n}',
+            "background_prompt.txt": "Background prompt.",
+            "background_response.json": '{\n    "mockup_scene": "text"\n}',
+            "filter_design_descriptions.txt": "Filter descriptions prompt.",
+            "filter_design_descriptions_response.json": '{"selected_designs": []}',
+            "filter_design_images_response.json": '{"selected_designs": []}',
+        }
+
+        def fake_read_text(path: Path) -> str:
+            return prompt_texts.get(path.name, "Prompt text.")
+
+        with patch("config.config_loader.read_text", side_effect=fake_read_text):
+            prompts = load_prompts()
 
         assert "## Required Response Format" in prompts["design"]
         assert "array of objects" in prompts["design"]

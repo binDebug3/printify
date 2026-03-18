@@ -128,6 +128,7 @@ class Orchestrator(object):
             min_price_usd=constants.MIN_PRICE_USD,
             dry_run=self.dry_run,
             retries=constants.MAX_PRINTIFY_RETRIES,
+            max_requests_per_minute=constants.PRINTIFY_MAX_REQUESTS_PER_MINUTE,
         )
 
     def set_up_prompting(self):
@@ -194,6 +195,7 @@ class Orchestrator(object):
             keyword: The keyword associated with the idea.
             raw_idea: The raw idea data as a dictionary.
         """
+        self.safe_dashboard_call("clear_images")
         self.safe_dashboard_call("set_stage", "Generating raw design")
         log_action(f"Processing idea {idea_number}/{self.n_ideas}")
         self.idea: Idea = build_idea_object(raw_idea=raw_idea, keyword=keyword)
@@ -251,13 +253,18 @@ class Orchestrator(object):
                 design.
         """
         idea: Idea = design_entry["idea"]
+        self.idea = idea
+        design_path: Optional[Path] = design_entry.get("design_path")
         design_bytes: bytes = design_entry["design_bytes"]
+        self.safe_dashboard_call("clear_images")
         self.safe_dashboard_call(
             "set_idea_name",
             idea.title,
             approved_index,
             approved_ideas_count,
         )
+        if design_path is not None:
+            self.safe_dashboard_call("update_image", "raw_design", design_path)
         self.safe_dashboard_call(
             "set_stage",
             "Generating transparent image and mockups",

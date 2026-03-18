@@ -188,7 +188,8 @@ file.
 
 Most runtime behavior is configured in `src/mass_production/constants.py`
 (examples: `REVIEW_DESIGNS`, `IDEAS_PER_KEYWORD`,
-`FILTERED_IDEAS_PER_KEYWORD`, and `BACKGROUND_REMOVAL_MODE`).
+`FILTERED_IDEAS_PER_KEYWORD`, `BACKGROUND_REMOVAL_MODE`, and
+`PRINTIFY_MAX_REQUESTS_PER_MINUTE`).
 
 
 ## File Architecture

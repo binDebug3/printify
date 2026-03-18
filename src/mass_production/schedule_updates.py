@@ -7,6 +7,7 @@ from typing import Dict, List
 
 from schedule.logger_config import log_action
 from schedule.tools import load_shop_id
+from file_tools.io_utils import cut
 
 import config.constants as constants
 
@@ -42,7 +43,7 @@ def _read_rows(path: Path) -> List[Dict[str, str]]:
     Returns:
         Parsed rows. Missing files return an empty list.
     """
-    log_action(f"Loading schedule rows from '{path}'")
+    log_action(f"Loading schedule rows from '{cut(path)}'")
     if not path.exists() or not path.is_file():
         return []
 
@@ -67,7 +68,7 @@ def _append_row(path: Path, row: Dict[str, str], field_names: List[str]) -> None
             writer.writeheader()
         writer.writerow(row)
     log_action(
-        f"Appended schedule row for product_id='{row['product_id']}' at '{path}'"
+        f"Appended schedule row for product_id='{row['product_id']}' at '{cut(path)}'"
     )
 
 

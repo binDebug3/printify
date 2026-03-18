@@ -38,6 +38,7 @@ class TestPrintifyClient:
             min_price_usd=9.99,
             dry_run=dry_run,
             retries=retries,
+            max_requests_per_minute=30,
         )
 
     def test_build_payload_creates_variants_and_uses_source_image_for_dry_upload(
@@ -91,14 +92,70 @@ class TestPrintifyClient:
         response.json.return_value = {"id": "prod-1"}
 
         with patch.object(
-            printify_module.requests,
-            "post",
+            client,
+            "_request",
             side_effect=[RuntimeError("temporary"), response],
-        ) as mock_post:
+        ) as mock_request:
             result = client.create_product({"title": "Listing"})
 
         assert result == {"id": "prod-1"}
-        assert mock_post.call_count == 2
+        assert mock_request.call_count == 2
+
+    def test_rate_limiter_sleeps_when_bucket_is_full(self):
+        """Sleeps to leak capacity before allowing a request past a full bucket."""
+        limiter = printify_module.LeakyBucketRateLimiter(max_requests_per_minute=60)
+
+        with (
+            patch.object(
+                printify_module.time,
+                "monotonic",
+                side_effect=[1.0, 2.0],
+            ),
+            patch.object(printify_module.time, "sleep") as mock_sleep,
+        ):
+            limiter._last_checked_at = 1.0
+            limiter._level = 1.0
+            limiter.acquire()
+
+        mock_sleep.assert_called_once_with(1.0)
+        assert limiter._level == pytest.approx(1.0)
+
+    def test_upload_image_uses_rate_limited_request_helper(self, tmp_path):
+        """Routes uploads through the shared request helper so rate limiting is enforced."""
+        client = self._make_client(dry_run=False)
+        image_path = tmp_path / "shirt.png"
+        image_path.write_bytes(b"png")
+        response = MagicMock()
+        response.raise_for_status.return_value = None
+        response.json.return_value = {"id": "img-1"}
+
+        with patch.object(client, "_request", return_value=response) as mock_request:
+            result = client.upload_image(image_path)
+
+        assert result == {"id": "img-1"}
+        mock_request.assert_called_once()
+
+    def test_request_waits_and_retries_once_after_429(self):
+        """Sleeps using Retry-After and retries the request once after a 429."""
+        client = self._make_client(dry_run=False)
+        rate_limited = MagicMock(status_code=429, headers={"Retry-After": "7"})
+        success = MagicMock(status_code=200)
+
+        with (
+            patch.object(client._rate_limiter, "acquire") as mock_acquire,
+            patch.object(
+                printify_module.requests,
+                "request",
+                side_effect=[rate_limited, success],
+            ) as mock_request,
+            patch.object(printify_module.time, "sleep") as mock_sleep,
+        ):
+            response = client._request("get", "https://example.test")
+
+        assert response is success
+        assert mock_request.call_count == 2
+        assert mock_acquire.call_count == 2
+        mock_sleep.assert_called_once_with(7.0)
 
     def test_update_product_metadata_returns_stub_in_dry_run(self):
         """Skips network metadata updates when dry_run is enabled."""

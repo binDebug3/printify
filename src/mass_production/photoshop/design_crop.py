@@ -26,7 +26,7 @@ def _resolve_base_mockups_dir() -> Path:
     for parent in module_path.parents:
         candidate: Path = parent / "data" / "base_mockups"
         if candidate.exists():
-            log_action(f"Resolved base mockups directory to '{candidate}'")
+            log_action(f"Resolved base mockups directory to '{cut(candidate)}'")
             return candidate
 
     fallback_index: int = min(4, len(module_path.parents) - 1)

@@ -15,13 +15,15 @@ from file_tools.io_utils import (
     cut,
 )
 from file_tools.parsing import (
+    StructuredOutputParseError,
     parse_json_array,
-    parse_json_object_payload,
+    parse_json_object_payload_strict,
 )
 from product.models import Idea
 from config.config_loader import (
     keyword_products_dir,
 )
+from generation.structured_output import generate_structured_output
 from schedule.logger_config import log_action
 
 
@@ -104,8 +106,14 @@ def generate_ideas_for_keyword(
         f"Context: {context}\n"
         f"Generate exactly {ideas_per_keyword} ideas."
     )
-    response_text: str = gemini.generate_text(prompt)
-    ideas: List[Dict] = parse_json_array(response_text)
+    ideas: List[Dict[str, Any]] = generate_structured_output(
+        gemini=gemini,
+        prompt=prompt,
+        parser=parse_json_array,
+        response_label=f"idea generation for '{keyword}'",
+        output_dir=keyword_products_dir(keyword),
+        artifact_stem="idea_generation",
+    )
     log_action(f"Generated {len(ideas)} ideas for keyword '{keyword}'")
     return ideas[:ideas_per_keyword]
 
@@ -161,10 +169,13 @@ def filter_ideas_for_keyword(
     if len(raw_ideas) <= filtered_ideas_per_keyword:
         log_action(
             "Number of generated ideas does not exceed filter limit; "
-            F"skipping filtering for keyword '{keyword}'"
+            f"skipping filtering for keyword '{keyword}'"
         )
-        return raw_ideas, {"selected_designs": [
-            "All ideas selected by default as count does not exceed filter limit."]}
+        return raw_ideas, {
+            "selected_designs": [
+                "All ideas selected by default as count does not exceed filter limit."
+            ]
+        }
 
     ideas_json: str = json.dumps(raw_ideas, indent=2)
     prompt: str = (
@@ -174,8 +185,21 @@ def filter_ideas_for_keyword(
         f"Filter this list of {constants.IDEAS_PER_KEYWORD} ideas down to the best "
         f"{filtered_ideas_per_keyword} ideas for product creation. "
     )
-    response_text: str = gemini.generate_text(prompt)
-    parsed_payload: dict[str, Any] = parse_json_object_payload(response_text)
+    try:
+        parsed_payload: dict[str, Any] = generate_structured_output(
+            gemini=gemini,
+            prompt=prompt,
+            parser=parse_json_object_payload_strict,
+            response_label=f"idea filtering for '{keyword}'",
+            output_dir=keyword_products_dir(keyword),
+            artifact_stem="idea_filtering",
+        )
+    except StructuredOutputParseError as exc:
+        log_action(
+            f"Falling back to default filter ordering for '{keyword}' after "
+            f"malformed JSON responses: {exc}"
+        )
+        parsed_payload = {"selected_designs": []}
     raw_selected_designs: Any = parsed_payload.get("selected_designs", [])
 
     normalized_selected_designs: list[dict[str, Any]] = []

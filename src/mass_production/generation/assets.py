@@ -24,8 +24,12 @@ from file_tools.io_utils import (
     cut,
 )
 from generation.idea_processing import write_persona_files
+from generation.structured_output import generate_structured_output
 from product.models import Idea
-from file_tools.parsing import parse_json_object_payload
+from file_tools.parsing import (
+    StructuredOutputParseError,
+    parse_json_object_payload_strict,
+)
 from schedule.logger_config import log_action
 
 
@@ -101,10 +105,23 @@ def generate_post_design_assets(
 
     background_prompt: str = f"Design JSON:\n{idea_json}\n\n{prompts['background']}"
     log_action(f"Generating background text for '{idea.title}'")
-    background_response_text: str = gemini.generate_text(background_prompt).strip()
-    background_payload: dict[str, Any] = parse_json_object_payload(
-        background_response_text
-    )
+    try:
+        background_payload: dict[str, Any] = generate_structured_output(
+            gemini=gemini,
+            prompt=background_prompt,
+            parser=parse_json_object_payload_strict,
+            response_label=f"background generation for '{idea.title}'",
+            output_dir=idea.folder_path,
+            artifact_stem="background_generation",
+        )
+        background_response_text: str = json.dumps(background_payload, indent=2)
+    except StructuredOutputParseError as exc:
+        log_action(
+            f"Falling back to raw background text for '{idea.title}' after "
+            f"malformed JSON responses: {exc}"
+        )
+        background_payload = {}
+        background_response_text = exc.original_text.strip()
     write_persona_files(idea.folder_path, background_payload)
     mockup_scene: str = str(
         background_payload.get("mockup_scene", background_response_text)

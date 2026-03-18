@@ -142,6 +142,11 @@ class PipelineProgressDashboard:
         log_action(f"Updating UI image slot '{cut(image_slot)}' with '{cut(path)}'")
         self._emit("image", {"slot": image_slot, "path": path})
 
+    def clear_images(self) -> None:
+        """Clear all image panels back to their placeholder state."""
+        log_action("Clearing all UI image slots")
+        self._emit("clear_images", True)
+
     def add_error(self, message: str) -> None:
         """Append an error message to the recent error list.
 
@@ -433,6 +438,10 @@ class PipelineProgressDashboard:
             self._update_image_slot(image_slot=image_slot, image_path=path)
             self._append_log(f"Updated image slot: {image_slot}")
             return
+        if event_type == "clear_images":
+            self._clear_image_slots()
+            self._append_log("Cleared image slots")
+            return
         if event_type == "error":
             self._append_log(f"ERROR: {str(payload)}")
             return
@@ -545,6 +554,17 @@ class PipelineProgressDashboard:
 
         self._image_refs[image_slot] = tk_image
         label.configure(image=tk_image, text="", bg="#EEF1EC")
+
+    def _clear_image_slots(self) -> None:
+        """Reset all image panels to their waiting state and clear image references."""
+        for slot, label in self._image_labels.items():
+            self._image_refs.pop(slot, None)
+            label.configure(
+                image="",
+                text="Waiting for image...",
+                bg="#EEF1EC",
+                fg="#4D5855",
+            )
 
     def _append_log(self, message: str) -> None:
         """Append one message into the recent activity list.

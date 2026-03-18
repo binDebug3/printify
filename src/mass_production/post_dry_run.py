@@ -349,6 +349,7 @@ def main() -> None:
         min_price_usd=constants.MIN_PRICE_USD,
         dry_run=False,
         retries=constants.MAX_PRINTIFY_RETRIES,
+        max_requests_per_minute=constants.PRINTIFY_MAX_REQUESTS_PER_MINUTE,
     )
 
     base_price = client.pick_base_price_usd(

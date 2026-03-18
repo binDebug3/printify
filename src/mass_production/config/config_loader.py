@@ -1,6 +1,4 @@
-"""
-Config loader for mass production pipeline.
-"""
+"""Config loader for mass production pipeline."""
 
 import os
 from pathlib import Path
@@ -13,6 +11,39 @@ from file_tools.io_utils import (
     slugify_title,
 )
 from schedule.logger_config import log_action
+
+
+def append_response_format(
+    prompt_text: str,
+    response_format_text: str,
+    *,
+    expect_list_of_objects: bool = False,
+) -> str:
+    """Append authoritative response-shape instructions to a prompt.
+
+    Args:
+        prompt_text: Base prompt content.
+        response_format_text: JSON example loaded from the response schema file.
+        expect_list_of_objects: Whether the schema represents one object shape
+            while the model must return a list of those objects.
+
+    Returns:
+        Prompt text with response-shape instructions appended.
+    """
+    if expect_list_of_objects:
+        expectation_text: str = (
+            "Return only valid JSON as an array of objects. "
+            "Each object in the array must match this exact shape:\n"
+        )
+    else:
+        expectation_text = (
+            "Return only valid JSON as a single object matching this exact shape:\n"
+        )
+    return (
+        f"{prompt_text.strip()}\n\n"
+        "## Required Response Format\n"
+        f"{expectation_text}{response_format_text.strip()}"
+    )
 
 
 def require_env(var_name: str) -> str:
@@ -65,17 +96,36 @@ def load_prompts() -> Dict[str, str]:
         Mapping of prompt names to their text content.
     """
     log_action("Loading prompt templates from disk")
+    design_prompt: str = append_response_format(
+        read_text(constants.DESIGN_PROMPT_PATH),
+        read_text(constants.DESIGN_RESPONSE_PATH),
+        expect_list_of_objects=True,
+    )
+    background_prompt: str = append_response_format(
+        read_text(constants.BACKGROUND_PROMPT_PATH),
+        read_text(constants.BACKGROUND_RESPONSE_PATH),
+    )
+    filter_design_descriptions_prompt: str = append_response_format(
+        read_text(constants.FILTER_DESIGN_DESCRIPTIONS_PATH),
+        read_text(constants.FILTER_DESIGN_DESCRIPTIONS_RESPONSE_PATH),
+    )
     return {
-        "design": read_text(constants.DESIGN_PROMPT_PATH),
+        "design": design_prompt,
         "image": read_text(constants.IMAGE_PROMPT_PATH),
-        "background": read_text(constants.BACKGROUND_PROMPT_PATH),
+        "background": background_prompt,
         "mockup": read_text(constants.MOCKUP_PROMPT_PATH),
         "title": read_text(constants.TITLE_PROMPT_PATH),
         "description": read_text(constants.DESCRIPTION_PROMPT_PATH),
         "keywords": read_text(constants.KEYWORDS_PROMPT_PATH),
         "default_description": read_text(constants.DEFAULT_DESCRIPTION_PATH),
-        "filter_design_descriptions": read_text(
-            constants.FILTER_DESIGN_DESCRIPTIONS_PATH
+        "filter_design_descriptions": filter_design_descriptions_prompt,
+        "background_response": read_text(constants.BACKGROUND_RESPONSE_PATH),
+        "design_response": read_text(constants.DESIGN_RESPONSE_PATH),
+        "filter_design_descriptions_response": read_text(
+            constants.FILTER_DESIGN_DESCRIPTIONS_RESPONSE_PATH
+        ),
+        "filter_design_images_response": read_text(
+            constants.FILTER_DESIGN_IMAGES_RESPONSE_PATH
         ),
     }
 

@@ -565,7 +565,7 @@ def pick_mockup_shirt(image_path: Path) -> Path:
             f"Base mockup PNG not found for color '{best_color}': '{mockup_path}'"
         )
 
-    log_action(f"Picked shirt color '{best_color}': '{mockup_path}'")
+    log_action(f"Picked shirt color '{best_color}': '{cut(mockup_path)}'")
     return mockup_path
 
 

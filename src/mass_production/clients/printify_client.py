@@ -3,6 +3,7 @@
 import base64
 import random
 import re
+import time
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -11,6 +12,44 @@ import requests
 import config.constants as constants
 from schedule.logger_config import log_action
 from file_tools.io_utils import cut
+
+
+class LeakyBucketRateLimiter:
+    """Leaky bucket limiter for evenly pacing outbound API requests."""
+
+    def __init__(self, max_requests_per_minute: int) -> None:
+        """Initialize limiter capacity and leak rate.
+
+        Args:
+            max_requests_per_minute: Maximum requests allowed during any rolling minute.
+        """
+        self._capacity: float = float(max(1, max_requests_per_minute))
+        self._leak_rate_per_second: float = self._capacity / 60.0
+        self._level: float = 0.0
+        self._last_checked_at: float = time.monotonic()
+
+    def acquire(self) -> None:
+        """Block until a new request can be admitted into the bucket."""
+        now: float = time.monotonic()
+        leaked_amount: float = (
+            now - self._last_checked_at
+        ) * self._leak_rate_per_second
+        self._level = max(0.0, self._level - leaked_amount)
+        self._last_checked_at = now
+
+        if self._level + 1.0 <= self._capacity:
+            self._level += 1.0
+            return
+
+        overflow: float = (self._level + 1.0) - self._capacity
+        wait_seconds: float = overflow / self._leak_rate_per_second
+        log_action(
+            "Printify leaky bucket delaying request | "
+            f"wait_seconds={wait_seconds:.2f} | "
+            f"bucket_level={self._level:.2f}/{self._capacity:.0f}"
+        )
+        time.sleep(wait_seconds)
+        self.acquire()
 
 
 class PrintifyClient:
@@ -29,6 +68,7 @@ class PrintifyClient:
         min_price_usd: Lower bound for generated pricing.
         dry_run: If true, never performs network create requests.
         retries: Maximum retries for create requests.
+        max_requests_per_minute: Maximum Printify API requests allowed per minute.
     """
 
     def __init__(
@@ -45,6 +85,7 @@ class PrintifyClient:
         min_price_usd: float,
         dry_run: bool,
         retries: int,
+        max_requests_per_minute: int,
     ):
         self._token: str = token
         self._shop_id: str = shop_id
@@ -58,6 +99,9 @@ class PrintifyClient:
         self._min_price_usd: float = min_price_usd
         self._dry_run: bool = dry_run
         self._retries: int = retries
+        self._rate_limiter: LeakyBucketRateLimiter = LeakyBucketRateLimiter(
+            max_requests_per_minute=max_requests_per_minute
+        )
 
     def pick_base_price_usd(self, base_usd: float, stdev_usd: float) -> float:
         """Sample a base price from a Gaussian distribution with a minimum floor.
@@ -120,7 +164,11 @@ class PrintifyClient:
         for color in colors_in_payload:
             ids_for_color: List[int] = color_to_ids[color]
             for idx, variant_id in enumerate(ids_for_color):
-                size: str = self._size_order[idx] if idx < len(self._size_order) else f"IDX_{idx}"
+                size: str = (
+                    self._size_order[idx]
+                    if idx < len(self._size_order)
+                    else f"IDX_{idx}"
+                )
                 surcharge: float = self._size_surcharge_usd.get(size, 0.0)
                 price_cents: int = int(round((base_price_usd + surcharge) * 100))
                 variants.append(
@@ -184,7 +232,9 @@ class PrintifyClient:
             Product payload returned by update endpoint.
         """
         if self._dry_run:
-            log_action(f"Dry-run mode: skipping metadata update for product '{product_id}'")
+            log_action(
+                f"Dry-run mode: skipping metadata update for product '{product_id}'"
+            )
             return {
                 "dry_run": True,
                 "product_id": product_id,
@@ -201,9 +251,9 @@ class PrintifyClient:
             f"Attempting metadata update for product '{product_id}' with "
             f"{len(normalized_tags)} tags"
         )
-        response = requests.put(
+        response = self._request(
+            "put",
             f"{constants.PRINTIFY_API_BASE_URL}/shops/{self._shop_id}/products/{product_id}.json",
-            headers=self._headers(),
             json=payload,
             timeout=60,
         )
@@ -241,9 +291,7 @@ class PrintifyClient:
             f"Attempting to set custom default mockup image '{mockup_image_id}' "
             f"for product '{product_id}'"
         )
-        payload: Dict[str, Any] = {
-            "images": []
-        }
+        payload: Dict[str, Any] = {"images": []}
         image_by_id: Dict[str, Any] = {
             "id": mockup_image_id,
             "variant_ids": variant_ids,
@@ -260,9 +308,9 @@ class PrintifyClient:
                     "is_default": True,
                 }
             )
-        response = requests.put(
+        response = self._request(
+            "put",
             f"{constants.PRINTIFY_API_BASE_URL}/shops/{self._shop_id}/products/{product_id}.json",
-            headers=self._headers(),
             json=payload,
             timeout=60,
         )
@@ -279,9 +327,9 @@ class PrintifyClient:
         Returns:
             Product payload.
         """
-        response = requests.get(
+        response = self._request(
+            "get",
             f"{constants.PRINTIFY_API_BASE_URL}/shops/{self._shop_id}/products/{product_id}.json",
-            headers=self._headers(),
             timeout=60,
         )
         response.raise_for_status()
@@ -311,9 +359,9 @@ class PrintifyClient:
             "contents": encoded_contents,
         }
 
-        response = requests.post(
+        response = self._request(
+            "post",
             f"{constants.PRINTIFY_API_BASE_URL}/uploads/images.json",
-            headers=self._headers(),
             json=payload,
             timeout=120,
         )
@@ -330,8 +378,11 @@ class PrintifyClient:
             API response payload or dry-run object.
         """
         if self._dry_run:
-            log_action(f"Dry-run mode: skipping product creation for '{payload.get('title', 
-                       'UNKNOWN')}'")
+            log_action(
+                f"Dry-run mode: skipping product creation for '{
+                    payload.get('title', 'UNKNOWN')
+                }'"
+            )
             return {
                 "dry_run": True,
                 "message": "Product creation skipped by dry-run setting.",
@@ -339,12 +390,14 @@ class PrintifyClient:
             }
 
         log_action(f"Creating product '{payload.get('title', 'UNKNOWN')}' in Printify")
-        url: str = f"{constants.PRINTIFY_API_BASE_URL}/shops/{self._shop_id}/products.json"
+        url: str = (
+            f"{constants.PRINTIFY_API_BASE_URL}/shops/{self._shop_id}/products.json"
+        )
 
         last_error: Exception | None = None
         for attempt in range(self._retries):
             try:
-                response = requests.post(url, headers=self._headers(), json=payload, timeout=60)
+                response = self._request("post", url, json=payload, timeout=60)
                 response.raise_for_status()
                 return response.json()
             except Exception as exc:  # noqa: BLE001
@@ -367,6 +420,56 @@ class PrintifyClient:
             "User-Agent": constants.PRINTIFY_USER_AGENT,
         }
 
+    def _request(self, method: str, url: str, **kwargs: Any) -> requests.Response:
+        """Send a rate-limited HTTP request to the Printify API.
+
+        Args:
+            method: HTTP method name.
+            url: Target URL.
+            **kwargs: Extra request keyword arguments.
+
+        Returns:
+            HTTP response object.
+        """
+        attempts_remaining: int = 2
+        while attempts_remaining > 0:
+            self._rate_limiter.acquire()
+            response: requests.Response = requests.request(
+                method=method,
+                url=url,
+                headers=self._headers(),
+                **kwargs,
+            )
+            if response.status_code != 429:
+                return response
+
+            attempts_remaining -= 1
+            retry_after_seconds: float = self._parse_retry_after_seconds(response)
+            log_action(
+                "Printify rate limit response received | "
+                f"retry_after_seconds={retry_after_seconds:.2f} | url='{url}'"
+            )
+            if attempts_remaining == 0:
+                return response
+            time.sleep(retry_after_seconds)
+
+        raise RuntimeError("Printify request loop exited unexpectedly")
+
+    @staticmethod
+    def _parse_retry_after_seconds(response: requests.Response) -> float:
+        """Extract a server-provided retry delay from a 429 response.
+
+        Args:
+            response: HTTP response object.
+
+        Returns:
+            Sleep duration in seconds.
+        """
+        retry_after_header: str = str(response.headers.get("Retry-After", "")).strip()
+        if retry_after_header.isdigit():
+            return max(1.0, float(retry_after_header))
+        return 5.0
+
     @staticmethod
     def _normalize_tags(raw_tags: List[str]) -> List[str]:
         """Normalize tags to Etsy-friendly short phrases.
@@ -387,7 +490,7 @@ class PrintifyClient:
             cleaned = re.sub(r"\s+", " ", cleaned)
             if not cleaned:
                 continue
-            cleaned = cleaned[:constants.KEYWORD_MAX_LENGTH].strip()
+            cleaned = cleaned[: constants.KEYWORD_MAX_LENGTH].strip()
             key = cleaned.lower()
             if key in seen:
                 continue

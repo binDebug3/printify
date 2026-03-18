@@ -401,6 +401,10 @@ def main() -> None:
         free_shipping=True,
     )
 
+    write_target_payload = folder / "printify_payload.json"
+    with open(write_target_payload, "w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2)
+
     try:
         result = client.create_product(payload)
     except Exception as exc:  # noqa: BLE001
@@ -410,7 +414,7 @@ def main() -> None:
     if product_id:
         try:
             append_created_product_to_schedules(
-                product_title=title,
+                product_title=folder.name,
                 product_id=str(product_id),
             )
         except Exception as exc:  # noqa: BLE001
@@ -471,12 +475,9 @@ def main() -> None:
         except Exception as exc:  # noqa: BLE001
             log_action(f"Default mockup update attempt failed (continuing): {exc}")
 
-    write_target_payload = folder / "printify_payload.json"
     write_target_result = folder / "printify_result.json"
     write_target_upload = folder / "printify_upload.json"
 
-    with open(write_target_payload, "w", encoding="utf-8") as f:
-        json.dump(payload, f, indent=2)
     with open(write_target_result, "w", encoding="utf-8") as f:
         json.dump(result, f, indent=2)
     with open(write_target_upload, "w", encoding="utf-8") as f:

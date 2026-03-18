@@ -158,6 +158,67 @@ class TestRunPipeline:
         assert len(metadata["selected_designs"]) == 4
 
 
+class TestPostToPrintify:
+    """Tests for the final Printify post and schedule step."""
+
+    @staticmethod
+    def _build_orchestrator(tmp_path: Path) -> pipeline_module.Orchestrator:
+        """Create an Orchestrator instance without running constructor side effects."""
+        orchestrator = pipeline_module.Orchestrator.__new__(
+            pipeline_module.Orchestrator
+        )
+        orchestrator.dashboard = None
+        orchestrator.safe_dashboard_call = MagicMock()
+        orchestrator.successful_products_count = 0
+        orchestrator.payload = {"title": "Listing Title"}
+        orchestrator.listing_title = "Listing Title"
+        orchestrator.idea = Idea(
+            keyword="alpha",
+            original_title="Alpha",
+            title="Alpha 1",
+            folder_name="Alpha_1",
+            folder_path=tmp_path / "Alpha_1",
+            payload={"title": "Alpha 1"},
+        )
+        orchestrator.idea.folder_path.mkdir(parents=True, exist_ok=True)
+        orchestrator.printify_client = MagicMock()
+        orchestrator.printify_client.create_product.return_value = {"id": "prod-123"}
+        return orchestrator
+
+    def test_post_to_printify_schedules_with_folder_name(self, tmp_path: Path):
+        """Uses folder_name for schedule nick_name so rows map to artifact directories."""
+        orchestrator = self._build_orchestrator(tmp_path)
+
+        with patch.object(
+            pipeline_module,
+            "append_created_product_to_schedules",
+            return_value=True,
+        ) as mock_append:
+            orchestrator.post_to_printify()
+
+        mock_append.assert_called_once_with(
+            product_title="Alpha_1",
+            product_id="prod-123",
+        )
+
+    def test_post_to_printify_recovers_missing_payload_file(self, tmp_path: Path):
+        """Rewrites printify_payload.json when absent before create-product call."""
+        orchestrator = self._build_orchestrator(tmp_path)
+        payload_path = orchestrator.idea.folder_path / "printify_payload.json"
+        if payload_path.exists():
+            payload_path.unlink()
+
+        with patch.object(
+            pipeline_module,
+            "append_created_product_to_schedules",
+            return_value=True,
+        ):
+            orchestrator.post_to_printify()
+
+        assert payload_path.exists()
+        assert payload_path.read_text(encoding="utf-8").strip() != ""
+
+
 class TestGenerateDesignImage:
     """Tests for design image generation and auto-cropping."""
 

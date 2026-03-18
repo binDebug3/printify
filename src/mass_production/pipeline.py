@@ -470,13 +470,29 @@ class Orchestrator(object):
         Post the created product payload to Printify to create a draft product, and handle
         any errors that occur during the product creation process.
         """
+        payload_path: Path = self.idea.folder_path / "printify_payload.json"
+        if not payload_path.exists():
+            log_action(
+                f"Missing payload artifact for '{self.idea.title}'; writing recovery file"
+            )
+            write_json(payload_path, self.payload)
+
         result: Dict[str, Any] = self.printify_client.create_product(self.payload)
         write_json(self.idea.folder_path / "printify_result.json", result)
         created_product_id: str = str(result.get("id", "")).strip()
         if created_product_id:
             try:
+                schedule_nick_name: str = str(
+                    getattr(self.idea, "folder_name", "")
+                ).strip()
+                if not schedule_nick_name:
+                    schedule_nick_name = str(getattr(self.idea, "title", "")).strip()
+                if not schedule_nick_name:
+                    schedule_nick_name = str(
+                        self.payload.get("title", self.listing_title)
+                    ).strip()
                 schedule_added: bool = append_created_product_to_schedules(
-                    product_title=str(self.payload.get("title", self.listing_title)),
+                    product_title=schedule_nick_name,
                     product_id=created_product_id,
                 )
                 if schedule_added:

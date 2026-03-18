@@ -93,7 +93,7 @@ def extract_first_json_block(text: str, opening_char: str) -> Optional[str]:
         elif current_char == closing_char:
             depth -= 1
             if depth == 0:
-                return text[start_index : index + 1]
+                return text[start_index: index + 1]
     return None
 
 

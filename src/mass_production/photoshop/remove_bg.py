@@ -299,6 +299,27 @@ class RemoveBgClient:
         return output_buffer.getvalue(), transparent_count
 
 
+def calculate_transparent_pixel_ratio(image_bytes: bytes) -> float:
+    """Calculate what portion of an RGBA image is fully transparent.
+
+    Args:
+        image_bytes: PNG or other image bytes to inspect.
+
+    Returns:
+        Ratio of pixels whose alpha channel is 0.0-1.0.
+    """
+    log_action("Calculating transparent pixel ratio for background removal result")
+    with Image.open(BytesIO(image_bytes)) as image_obj:
+        rgba_image: Image.Image = image_obj.convert("RGBA")
+        alpha_channel = rgba_image.getchannel("A")
+        total_pixels: int = rgba_image.width * rgba_image.height
+        transparent_pixels: int = sum(
+            1 for alpha_value in alpha_channel.getdata() if alpha_value == 0
+        )
+
+    return transparent_pixels / float(max(1, total_pixels))
+
+
 def _parse_args() -> argparse.Namespace:
     """Parse CLI arguments for manual background removal.
 

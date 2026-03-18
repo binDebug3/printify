@@ -5,8 +5,6 @@ import re
 
 # Paths
 AUTOMATION_ROOT: Path = Path(__file__).resolve().parents[4]
-print(f"Automation root directory: {AUTOMATION_ROOT}")
-input("Press Enter to continue...")
 DATA_DIR: Path = AUTOMATION_ROOT / "data"
 PROMPTS_DIR: Path = DATA_DIR / "prompts"
 PRODUCTS_DIR: Path = DATA_DIR / "products"
@@ -52,6 +50,7 @@ SMART_BG_MATTE_START: float = 14.0
 SMART_BG_MATTE_END: float = 95.0
 SMART_BG_FEATHER_RADIUS: float = 1.1
 SMART_BG_EDGE_ALPHA_MIN: float = 0.08
+MIN_TRANSPARENT_PIXEL_RATIO: float = 0.20
 
 # Runtime behavior
 DEFAULT_DRY_RUN: bool = False
@@ -104,5 +103,5 @@ REVIEW_DESIGNS: bool = True
 ENABLE_PROGRESS_UI: bool = True
 SCHEDULE_NEW_PRODUCTS: bool = True
 BACKGROUND_REMOVAL_MODE: str = REMOVE_BG_SMART
-IDEAS_PER_KEYWORD: int = 20
+IDEAS_PER_KEYWORD: int = 4
 FILTERED_IDEAS_PER_KEYWORD: int = IDEAS_PER_KEYWORD // 2

@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Optional, Any
 
 from config import constants
-from photoshop.remove_bg import RemoveBgClient
+from photoshop.remove_bg import RemoveBgClient, calculate_transparent_pixel_ratio
 from photoshop.design_crop import (
     crop_design_image_to_content,
     crop_center_percent,
@@ -87,7 +87,11 @@ def generate_post_design_assets(
 
     # remove background
     log_action(f"Removing background from design for '{idea.title}'")
-    transparent_bytes: bytes = remove_bg_client.remove_background(design_bytes)
+    transparent_bytes: bytes = _build_transparent_design_bytes(
+        idea=idea,
+        remove_bg_client=remove_bg_client,
+        design_bytes=design_bytes,
+    )
     transparent_path: Path = idea.folder_path / "design_transparent.png"
     write_bytes(transparent_path, transparent_bytes)
     safe_dashboard_call(
@@ -164,6 +168,86 @@ def generate_post_design_assets(
     )
 
     return transparent_path, mockup_path, mockup_cropped_path
+
+
+def _build_transparent_design_bytes(
+    idea: Idea,
+    remove_bg_client: RemoveBgClient,
+    design_bytes: bytes,
+) -> bytes:
+    """Build transparent design bytes, falling back to the manual UI when needed.
+
+    Args:
+        idea: Idea whose design is being processed.
+        remove_bg_client: Configured background-removal client.
+        design_bytes: Raw generated design bytes.
+
+    Returns:
+        Transparent design bytes for downstream mockup generation.
+    """
+    log_action(f"Evaluating transparency coverage for '{idea.title}'")
+    transparent_bytes: bytes = remove_bg_client.remove_background(design_bytes)
+    try:
+        transparent_ratio: float = calculate_transparent_pixel_ratio(transparent_bytes)
+    except OSError as exc:
+        log_action(
+            f"Skipping transparency ratio check for '{idea.title}' because the "
+            f"background-removal result was not a readable image: {exc}"
+        )
+        return transparent_bytes
+
+    log_action(f"Transparent pixel ratio for '{idea.title}': {transparent_ratio:.1%}")
+    if transparent_ratio >= constants.MIN_TRANSPARENT_PIXEL_RATIO:
+        return transparent_bytes
+
+    source_design_path: Path = idea.folder_path / "design.png"
+    if not source_design_path.exists():
+        write_bytes(source_design_path, design_bytes)
+
+    log_action(
+        f"Transparent pixel ratio for '{idea.title}' fell below "
+        f"{constants.MIN_TRANSPARENT_PIXEL_RATIO:.0%}; launching manual background UI"
+    )
+    manual_output_path: Path = _launch_manual_background_removal(source_design_path)
+    manual_bytes: bytes = manual_output_path.read_bytes()
+    try:
+        manual_ratio: float = calculate_transparent_pixel_ratio(manual_bytes)
+        log_action(
+            f"Manual background-removal result for '{idea.title}' saved from "
+            f"'{cut(manual_output_path)}' with transparent pixel ratio {manual_ratio:.1%}"
+        )
+    except OSError as exc:
+        log_action(
+            f"Manual background-removal result for '{idea.title}' was saved from "
+            f"'{cut(manual_output_path)}', but its transparency ratio could not be "
+            f"measured: {exc}"
+        )
+    return manual_bytes
+
+
+def _launch_manual_background_removal(source_design_path: Path) -> Path:
+    """Open the manual background-removal tool and return the saved image path.
+
+    Args:
+        source_design_path: Source design file to preload into the UI.
+
+    Returns:
+        Path to the saved manual background-removal output.
+
+    Raises:
+        RuntimeError: If the UI closes without saving a result.
+    """
+    log_action(f"Opening manual background-removal UI for '{cut(source_design_path)}'")
+    from photoshop.remove_bg_ui import run_interactive_background_removal
+
+    saved_output_path: Optional[Path] = run_interactive_background_removal(
+        image_path=source_design_path,
+    )
+    if saved_output_path is None or not saved_output_path.exists():
+        raise RuntimeError(
+            "Manual background-removal UI was closed before saving a transparent design"
+        )
+    return saved_output_path
 
 
 def safe_dashboard_call(

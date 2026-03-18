@@ -451,6 +451,76 @@ class TestGeneratePostDesignAssets:
                 design_bytes=b"raw-design",
             )
 
+    def test_falls_back_to_manual_background_ui_when_auto_result_is_too_opaque(
+        self,
+        tmp_path: Path,
+    ):
+        """Uses the manually saved UI output for design_transparent.png when needed."""
+        idea_folder = tmp_path / "idea"
+        idea_folder.mkdir(parents=True, exist_ok=True)
+        design_path = idea_folder / "design.png"
+        design_path.write_bytes(b"design-bytes")
+
+        idea = Idea(
+            keyword="alpha",
+            original_title="Alpha Shirt",
+            title="Alpha Shirt 1",
+            folder_name="Alpha_Shirt_1",
+            folder_path=idea_folder,
+            payload={"mockup_color": "Light Blue"},
+        )
+        gemini = MagicMock()
+        gemini.generate_text.return_value = "Studio"
+        gemini.generate_image.return_value = b"mockup-final"
+        remove_bg_client = MagicMock()
+        remove_bg_client.remove_background.return_value = b"auto-transparent"
+        manual_output_path = idea_folder / "design_simplified.png"
+        manual_output_path.write_bytes(b"manual-transparent")
+        mockup_shirt_path = idea_folder / "lightBlue.png"
+        mockup_shirt_path.write_bytes(b"mockup-base")
+        default_mockup_path = idea_folder / "mockup_default_lightBlue.png"
+        default_mockup_path.write_bytes(b"default-mockup")
+
+        with (
+            patch.object(
+                generation.assets,
+                "calculate_transparent_pixel_ratio",
+                side_effect=[0.05, 0.42],
+            ),
+            patch.object(
+                generation.assets,
+                "_launch_manual_background_removal",
+                return_value=manual_output_path,
+            ) as mock_launch_manual_ui,
+            patch.object(
+                generation.assets,
+                "create_default_color_mockup",
+                return_value=default_mockup_path,
+            ),
+            patch.object(
+                generation.assets,
+                "pick_mockup_shirt",
+                return_value=mockup_shirt_path,
+            ),
+            patch.object(
+                generation.assets,
+                "crop_center_percent",
+                return_value=None,
+            ),
+        ):
+            generation.assets.generate_post_design_assets(
+                idea=idea,
+                prompts={"background": "bg", "mockup": "mk"},
+                gemini=gemini,
+                remove_bg_client=remove_bg_client,
+                design_bytes=b"raw-design",
+            )
+
+        mock_launch_manual_ui.assert_called_once_with(design_path)
+        assert (idea_folder / "design_transparent.png").read_bytes() == (
+            b"manual-transparent"
+        )
+
 
 class TestSaveFinalMockupImage:
     """Tests for persisting final mockups in the shared output folder."""

@@ -373,3 +373,23 @@ class TestRemoveBgClient:
 
         with pytest.raises(ValueError, match="Unsupported background removal mode"):
             client.remove_background(b"image-bytes")
+
+    def test_calculate_transparent_pixel_ratio_counts_fully_clear_pixels(self):
+        """Measures the portion of pixels that are fully transparent."""
+        image = Image.new("RGBA", (2, 2))
+        image.putdata(
+            [
+                (255, 255, 255, 0),
+                (255, 255, 255, 0),
+                (10, 10, 10, 255),
+                (20, 20, 20, 255),
+            ]
+        )
+        input_buffer = BytesIO()
+        image.save(input_buffer, format="PNG")
+
+        ratio = remove_bg_module.calculate_transparent_pixel_ratio(
+            input_buffer.getvalue()
+        )
+
+        assert ratio == 0.5

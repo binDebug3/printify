@@ -218,8 +218,12 @@ class PipelineProgressDashboard:
         self._keyword_var = tk.StringVar(value="Keyword: waiting...")
         self._idea_var = tk.StringVar(value="Idea: waiting...")
         self._stage_var = tk.StringVar(value="Stage: initializing")
-        self._eta_var = tk.StringVar(value="Elapsed: 0:00 | ETA: --:--")
-        self._summary_var = tk.StringVar(value="Finished 0/0 | Success 0 | Failed 0")
+        self._eta_var = tk.StringVar(
+            value="Elapsed: 0:00 | Avg/Product: --:-- | ETA: --:--"
+        )
+        self._summary_var = tk.StringVar(
+            value="Finished products 0/0 | Success 0 | Failed 0"
+        )
 
         self._image_labels: Dict[str, Any] = {}
         self._image_refs: Dict[str, Any] = {}
@@ -585,7 +589,7 @@ class PipelineProgressDashboard:
         finished = min(self._finished_ideas, total) if total else self._finished_ideas
         self._progress.configure(maximum=max(1, total), value=finished)
         self._summary_var.set(
-            f"Finished {self._finished_ideas}/{total} | "
+            f"Finished products {self._finished_ideas}/{total} | "
             f"Success {self._successful_ideas} | Failed {self._failed_ideas}"
         )
 
@@ -595,18 +599,30 @@ class PipelineProgressDashboard:
         elapsed_minutes = int(elapsed_seconds) // 60
         elapsed_remainder = int(elapsed_seconds) % 60
 
+        average_text = "--:--"
         eta_text = "--:--"
         if self._finished_ideas > 0 and self._total_ideas > self._finished_ideas:
             average_seconds = elapsed_seconds / float(self._finished_ideas)
+            average_minutes = int(average_seconds) // 60
+            average_remainder = int(average_seconds) % 60
+            average_text = f"{average_minutes}:{average_remainder:02d}"
             eta_seconds = average_seconds * float(
                 self._total_ideas - self._finished_ideas
             )
-            eta_minutes = int(eta_seconds) // 60
-            eta_remainder = int(eta_seconds) % 60
-            eta_text = f"{eta_minutes}:{eta_remainder:02d}"
+            estimated_completion_timestamp = time.time() + eta_seconds
+            eta_text = time.strftime(
+                "%H:%M",
+                time.localtime(estimated_completion_timestamp),
+            )
+        elif self._finished_ideas > 0:
+            average_seconds = elapsed_seconds / float(self._finished_ideas)
+            average_minutes = int(average_seconds) // 60
+            average_remainder = int(average_seconds) % 60
+            average_text = f"{average_minutes}:{average_remainder:02d}"
 
         self._eta_var.set(
-            f"Elapsed: {elapsed_minutes}:{elapsed_remainder:02d} | ETA: {eta_text}"
+            f"Elapsed: {elapsed_minutes}:{elapsed_remainder:02d} | "
+            f"Avg/Product: {average_text} | ETA: {eta_text}"
         )
 
     def _on_window_close(self) -> None:

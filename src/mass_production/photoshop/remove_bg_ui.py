@@ -193,6 +193,7 @@ class RemoveBgUiApp:
         self.history_dir: Path = history_dir
         self.change_index: int = 0
         self.history_paths: list[Path] = []
+        self.saved_output_path: Optional[Path] = None
 
         self.current_image: Image.Image = initial_image.convert("RGBA")
         self.display_image: Optional[ImageTk.PhotoImage] = None
@@ -868,6 +869,7 @@ class RemoveBgUiApp:
             log_action(f"Failed to save simplified image: {exc}")
             return
 
+        self.saved_output_path = output_path
         messagebox.showinfo("Saved", f"Saved simplified image to:\n{output_path}")
         log_action(f"Saved simplified image to '{output_path}'")
         self.root.destroy()
@@ -918,6 +920,38 @@ def _run_smart_remove(image_path: Path) -> Image.Image:
     return processed_image
 
 
+def run_interactive_background_removal(
+    image_path: Path,
+    tolerance: int = DEFAULT_TOLERANCE,
+) -> Optional[Path]:
+    """Open the background-removal UI and return the saved output path.
+
+    Args:
+        image_path: Source image that should be preloaded into the editor.
+        tolerance: Per-channel color tolerance for bucket removal.
+
+    Returns:
+        Saved output path, or None if the window is closed without saving.
+    """
+    log_action(f"Launching interactive background removal for '{image_path}'")
+    input_path: Path = validate_image_path(image_path)
+    initial_image: Image.Image = _run_smart_remove(input_path)
+
+    workspace_root: Path = _resolve_workspace_root()
+    history_dir: Path = workspace_root
+    for part in HISTORY_DIR_PARTS:
+        history_dir = history_dir / part
+
+    app = RemoveBgUiApp(
+        original_path=input_path,
+        initial_image=initial_image,
+        tolerance=tolerance,
+        history_dir=history_dir,
+    )
+    app.run()
+    return app.saved_output_path
+
+
 def main(argv: Optional[list[str]] = None) -> int:
     """
     Run smart remove UI workflow.
@@ -940,8 +974,7 @@ def main(argv: Optional[list[str]] = None) -> int:
             return 1
 
     try:
-        input_path: Path = validate_image_path(raw_path)
-        initial_image: Image.Image = _run_smart_remove(input_path)
+        input_path = validate_image_path(raw_path)
     except (FileNotFoundError, IsADirectoryError, ValueError) as exc:
         log_action(f"Input validation failed for remove_bg_ui: {exc}")
         print(f"Error: {exc}")
@@ -955,18 +988,20 @@ def main(argv: Optional[list[str]] = None) -> int:
         print(f"Error: {exc}")
         return 1
 
-    workspace_root: Path = _resolve_workspace_root()
-    history_dir: Path = workspace_root
-    for part in HISTORY_DIR_PARTS:
-        history_dir = history_dir / part
+    try:
+        run_interactive_background_removal(
+            image_path=input_path,
+            tolerance=args.tolerance,
+        )
+    except UnidentifiedImageError:
+        log_action(f"Input file is not a recognized image: {raw_path}")
+        print(f"Error: not a recognized image: {raw_path}")
+        return 1
+    except OSError as exc:
+        log_action(f"Image processing failed in remove_bg_ui: {exc}")
+        print(f"Error: {exc}")
+        return 1
 
-    app = RemoveBgUiApp(
-        original_path=input_path,
-        initial_image=initial_image,
-        tolerance=args.tolerance,
-        history_dir=history_dir,
-    )
-    app.run()
     return 0
 
 

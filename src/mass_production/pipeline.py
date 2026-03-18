@@ -287,31 +287,30 @@ class Orchestrator(object):
     def update_timer(
         self,
         keyword: str,
+        status: str,
     ) -> None:
-        """
-        Update timing metrics for the current iteration and log the estimated remaining time
-        for the keyword.
+        """Update timing metrics based on completed products.
 
         Args:
-            keyword: The keyword associated with the current iteration, used for logging context.
+            keyword: Keyword associated with the completed idea/product.
+            status: Final status label for the completed idea/product.
         """
-        self.completed_iterations += 1
-        elapsed_time_seconds: float = time.monotonic() - self.loop_start_time
-        average_iteration_seconds: float = (
-            elapsed_time_seconds / self.completed_iterations
+        self.completed_products += 1
+        elapsed_time_seconds: float = time.monotonic() - self.products_timing_start_time
+        average_product_seconds: float = elapsed_time_seconds / self.completed_products
+        estimated_total_seconds: float = (
+            average_product_seconds * self.total_ideas_scheduled
         )
-        estimated_total_seconds: float = average_iteration_seconds * self.n_ideas
         estimated_remaining_seconds: float = max(
             estimated_total_seconds - elapsed_time_seconds,
             0.0,
         )
-        iteration_duration_seconds: float = time.monotonic() - self.iteration_start_time
         log_action(
-            "Filtered-idea timing | "
+            "Product timing | "
             f"keyword='{keyword}' | "
-            f"iteration={self.completed_iterations}/{self.n_ideas} | "
-            f"status='{self.iteration_status}' | "
-            f"iteration_seconds={iteration_duration_seconds:.1f} | "
+            f"completed_products={self.completed_products}/{self.total_ideas_scheduled} | "
+            f"status='{status}' | "
+            f"average_seconds_per_product={average_product_seconds:.1f} | "
             f"elapsed_seconds={elapsed_time_seconds:.1f} | "
             f"estimated_remaining_seconds={estimated_remaining_seconds:.1f} | "
             f"estimated_total_seconds={estimated_total_seconds:.1f}"
@@ -348,11 +347,11 @@ class Orchestrator(object):
             keyword: The keyword associated with the idea that failed to generate a design.
             exc: The exception that was raised during design generation.
         """
-        self.iteration_status = f"failed: {exc}"
         error_message = f"Failed processing idea for keyword '{keyword}': {exc}"
         log_action(error_message)
         self.safe_dashboard_call("add_error", error_message)
         self.safe_dashboard_call("mark_idea_finished", False)
+        self.update_timer(keyword, "failed")
 
     def review_design(
         self,
@@ -385,6 +384,7 @@ class Orchestrator(object):
             )
             for _ in range(max(0, rejected_count)):
                 self.safe_dashboard_call("mark_idea_finished", False)
+                self.update_timer(keyword, "rejected")
         except Exception as exc:  # noqa: BLE001
             success = False
             error_message = f"Manual design review failed for '{keyword}': {exc}"
@@ -392,6 +392,7 @@ class Orchestrator(object):
             self.safe_dashboard_call("add_error", error_message)
             for _ in range(len(self.generated_designs)):
                 self.safe_dashboard_call("mark_idea_finished", False)
+                self.update_timer(keyword, "review_failed")
         return success
 
     def upload_image(
@@ -505,6 +506,7 @@ class Orchestrator(object):
                 )
         self.successful_products_count += 1
         self.safe_dashboard_call("mark_idea_finished", True)
+        self.update_timer(self.idea.keyword, "success")
         log_action(f"Completed idea '{self.idea.title}'")
 
     def generate_all_designs(
@@ -519,17 +521,12 @@ class Orchestrator(object):
         """
         for idea_index, raw_idea in enumerate(self.filtered_ideas):
             idea_number: int = idea_index + 1
-            self.iteration_start_time: float = time.monotonic()
-            self.iteration_status: str = "success"
-
             try:
                 self.build_idea(idea_number, keyword, raw_idea)
                 self.generate_design(idea_index)
             except Exception as exc:  # noqa: BLE001
                 self.log_design_error(keyword, exc)
                 continue
-            finally:
-                self.update_timer(keyword)
 
     def post_all_products(
         self,
@@ -554,6 +551,7 @@ class Orchestrator(object):
                 log_action(error_message)
                 self.safe_dashboard_call("add_error", error_message)
                 self.safe_dashboard_call("mark_idea_finished", False)
+                self.update_timer(keyword, "failed")
                 continue
 
     def record_post(
@@ -602,6 +600,8 @@ class Orchestrator(object):
 
             self.start_dashboard()
             self.total_ideas_scheduled: int = 0
+            self.completed_products: int = 0
+            self.products_timing_start_time: float = time.monotonic()
             for idx, (keyword, context) in enumerate(
                 zip(self.keywords, self.contexts), start=1
             ):
@@ -614,8 +614,6 @@ class Orchestrator(object):
 
                 self.generated_designs: list[dict[str, Any]] = []
                 self.n_ideas: int = len(self.filtered_ideas)
-                self.loop_start_time: float = time.monotonic()
-                self.completed_iterations: int = 0
 
                 self.generate_all_designs(keyword)
                 if not self.generated_designs:
